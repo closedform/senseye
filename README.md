@@ -34,17 +34,14 @@ Every WiFi access point, BLE device, smart bulb, and speaker in your space becom
 ## Quick start
 
 ```bash
-# Install
-pip install -e .
-
 # Run on your Mac (sensor + UI)
-python -m senseye
+uv run senseye
 
 # Run on a Raspberry Pi (headless sensor)
-python -m senseye --headless
+uv run senseye --headless
 
 # Calibrate the map (acoustic ping sequence)
-python -m senseye calibrate
+uv run senseye calibrate
 
 # Nodes discover each other automatically via mDNS
 ```
@@ -55,7 +52,7 @@ Any device that can run Python is a node. Place it somewhere, start senseye, and
 
 ```bash
 # On a Raspberry Pi
-python -m senseye --headless --role fixed --name pi-kitchen
+uv run senseye --headless --role fixed --name pi-kitchen
 
 # The node auto-discovers peers via mDNS
 # The map recalibrates to incorporate the new sensor
@@ -76,10 +73,10 @@ Resolution scales with the number of fixed nodes:
 Nodes with speakers and microphones can ping each other ultrasonically (18-22kHz, inaudible) for centimeter-accurate distance measurement.
 
 ```bash
-python -m senseye --acoustic off         # no chirps
-python -m senseye --acoustic on-demand   # only during calibration
-python -m senseye --acoustic 10m         # ping every 10 minutes
-python -m senseye --acoustic 1h          # ping every hour
+uv run senseye --acoustic off         # no chirps
+uv run senseye --acoustic on-demand   # only during calibration
+uv run senseye --acoustic 10m         # ping every 10 minutes
+uv run senseye --acoustic 1h          # ping every hour
 ```
 
 ## Architecture
