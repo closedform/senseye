@@ -143,9 +143,11 @@ class PeerMesh:
         finally:
             s.close()
 
-    def _on_service_change(
-        self, zc: Zeroconf, service_type: str, name: str, state_change: ServiceStateChange,
-    ) -> None:
+    def _on_service_change(self, **kwargs) -> None:
+        zc = kwargs.get("zeroconf")
+        service_type = kwargs.get("service_type", "")
+        name = kwargs.get("name", "")
+        state_change = kwargs.get("state_change")
         if state_change in (ServiceStateChange.Added, ServiceStateChange.Updated):
             asyncio.ensure_future(self._handle_discovered(zc, service_type, name))
         elif state_change == ServiceStateChange.Removed:
