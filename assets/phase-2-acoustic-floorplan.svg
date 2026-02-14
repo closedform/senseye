@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620">
+<defs>
+<marker id="arrow" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto"><path d="M0,0 L0,12 L10,6 z" fill="#7dd3fc"/></marker>
+<filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#020617" flood-opacity="0.55"/></filter>
+<linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0d1428"/><stop offset="100%" stop-color="#0b1020"/></linearGradient>
+</defs>
+<rect x="0" y="0" width="1200" height="620" fill="url(#bgGrad)"/>
+<text x="600" y="42" fill="#e5f3ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="28" text-anchor="middle">Phase 2: Acoustic Calibration</text>
+<rect x="210" y="110" width="780" height="420" rx="16" fill="#10192e" stroke="#7dd3fc" stroke-width="2" filter="url(#softShadow)"/>
+<line x1="600" y1="110" x2="600" y2="260" stroke="#7dd3fc" stroke-width="2"/>
+<line x1="600" y1="330" x2="600" y2="530" stroke="#7dd3fc" stroke-width="2"/>
+<line x1="210" y1="320" x2="990" y2="320" stroke="#7dd3fc" stroke-width="2"/>
+<text x="380" y="230" fill="#e5f3ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="26" text-anchor="middle">kitchen</text>
+<text x="800" y="230" fill="#e5f3ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="26" text-anchor="middle">hallway</text>
+<text x="380" y="445" fill="#e5f3ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="26" text-anchor="middle">bedroom</text>
+<text x="800" y="445" fill="#e5f3ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="26" text-anchor="middle">living</text>
+<text x="600" y="298" fill="#34d399" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" text-anchor="middle">door</text>
+<circle cx="330" cy="180" r="15" fill="#1e3a8a" stroke="#7dd3fc" stroke-width="2"/>
+<text x="330" y="186" fill="#e5f3ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" text-anchor="middle">n1</text>
+<circle cx="320" cy="410" r="15" fill="#1e3a8a" stroke="#7dd3fc" stroke-width="2"/>
+<text x="320" y="416" fill="#e5f3ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" text-anchor="middle">n2</text>
+<circle cx="830" cy="420" r="15" fill="#1e3a8a" stroke="#7dd3fc" stroke-width="2"/>
+<text x="830" y="426" fill="#e5f3ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" text-anchor="middle">n3</text>
+<text x="600" y="575" fill="#9fb7d5" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" text-anchor="middle">cm-accurate ranges -> MDS -> structured floorplan</text>
+</svg>
