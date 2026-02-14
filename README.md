@@ -2,7 +2,7 @@
 
 Weekend prototype for fun: a state-of-the-art sensor-fusion demo for room mapping and motion tracking. Built with help from Claude, Codex, and Antigravity. Please do not embed this in my thermostat or smoke detector.
 
-Distributed RF/acoustic sensing for apartment mapping and live motion inference.
+Distributed RF/acoustic sensing for indoor floorplan mapping and live motion inference.
 
 Senseye builds a static floorplan from WiFi/BLE/acoustic structure and overlays dynamic motion/device estimates in real time.
 
