@@ -17,52 +17,6 @@ Senseye uses:
 
 For full derivations and equations, see `DESIGN.md`.
 
-## Quick math summary
-
-1. RF model (`n=2.5, A=45` indoor; `n=2.0` free-space baseline for calibration)
-
-$$
-\text{RSSI}_{\text{expected}}(d) = -(10n\log_{10}(d)+A),
-\qquad
-d = 10^{\frac{-\text{RSSI}-A}{10n}}
-$$
-
-2. Kalman model (per path)
-
-$$
-\mathbf{x}_k=[\text{rssi}_k,\dot{\text{rssi}}_k]^T,
-\quad
-\mathbf{x}_{k|k-1}=\mathbf{F}\mathbf{x}_{k-1|k-1},
-\quad
-\mathbf{K}_k=\mathbf{P}_{k|k-1}\mathbf{H}^T(\mathbf{H}\mathbf{P}_{k|k-1}\mathbf{H}^T+R)^{-1}
-$$
-
-3. Consensus weighting
-
-$$
-\sigma^2(c)=\frac{1-c}{c}+\epsilon,
-\quad
-w=\sigma^{-2},
-\quad
-\hat{x}=\frac{\sum_i w_i x_i}{\sum_i w_i}
-$$
-
-4. Trilateration objective
-
-$$
-r_i(x)=||x-a_i||-d_i,
-\quad
-\Delta=(J^T W J+\lambda I)^{-1}J^TWr
-$$
-
-5. Tomography reconstruction (`W = diag(c_i/(1-c_i))`, consistent with consensus)
-
-$$
-\min_x ||W^{1/2}(Ax-b)||_2^2 + \alpha ||x||_2^2,
-\quad
-x^*=(A^TWA+\alpha I)^{-1}A^TWb
-$$
-
 ## How it works
 
 Each node runs: **scan** → **filter** → **infer** → **share** → **fuse** → **render**
@@ -99,12 +53,12 @@ Result: real floor plan
 
   +---------+---------+
   | kitchen | hallway |
-  |  Pi1    |    *    |
+  |  n1    |    *    |
   |         +--   ----+
   |              door |
   +---------+---------+
   | bedroom | living  |
-  |  Pi2    |  Pi3    |
+  |  n2    |  n3    |
   +---------+---------+
 ```
 
@@ -118,12 +72,12 @@ Live dashboard:
 
   +---------+---------+
   | kitchen | hallway |
-  |  *Pi1   |    *    |
+  |  *n1   |    *    |
   |   o phone  ------+
   |         |    door |
   +---------+---------+
   | bedroom | living  |
-  |  *Pi2   |  *Pi3   |
+  |  *n2   |  *n3   |
   |         | oo watch|
   +---------+---------+
 
@@ -131,16 +85,54 @@ Live dashboard:
   devices: 2 tracked  nodes: 3 online
 ```
 
-### Pipeline
+### Node pipeline
+
+Each node runs the same code. Beliefs flow through the gossip mesh into shared fusion.
 
 ```
-  scan --> kalman --> infer --> share --> fuse --> render
-                                 |         |
-                            gossip mesh    |
-                            (mDNS+TCP)     |
-                                      +----+----+
-                                      |         |
-                                   trilat.   tomography
+                    +--------+    +--------+    +--------+
+  WiFi/BLE/acoustic | SCAN   |--->| KALMAN |--->| INFER  |
+  signals           +--------+    +--------+    +---+----+
+                                                    |
+              local belief: links, devices, zones,  |  confidence
+                                                    |
+          +=========================================+==========+
+          |                GOSSIP MESH                         |
+          |                mDNS + TCP                          |
+          |                seq dedup + hop TTL                 |
+          |                                                    |
++---------+--+                                     +---------+-+
+| Node B     |          +-------------+            | Node C    |
+|            |<-------->|  CONSENSUS  |<---------->|           |
+| scan       |          |             |            | scan      |
+| kalman     |          | inv-var wt  |            | kalman    |
+| infer      |          | agreement   |            | infer     |
+|            |          | penalty     |            |           |
++---------+--+          +------+------+            +---------+-+
+          |                    |                               |
+          |          +---------+---------+                     |
+          |          |                   |                     |
+          |    +-----+------+   +--------+-------+            |
+          |    |  TRILAT.   |   |   TOMOGRAPHY   |            |
+          |    |            |   |                 |            |
+          |    | Gauss-     |   | ridge regress.  |            |
+          |    | Newton +   |   | attenuation    |            |
+          |    | Tukey      |   | grid           |            |
+          |    +-----+------+   +--------+-------+            |
+          |          +----------+---------+                    |
+          |                     |                              |
+          +=====================+==============================+
+                                |
+                         +------+------+
+                         | WORLD STATE |
+                         |             |
+                         | static map  |
+                         | dynamic ovl |
+                         +------+------+
+                                |
+                         +------+------+
+                         |  DASHBOARD  |
+                         +-------------+
 ```
 
 ## Adding nodes
@@ -150,7 +142,7 @@ Any device that can run Python is a node. More nodes = more signal paths = bette
 ```
 1 node                    2-3 nodes
 
-  Pi1                     Pi1-------Pi2
+  n1                     n1-------n2
    |                       |  \   /  |
    |                       |   \ /   |
  router                    |    X    |
@@ -163,15 +155,15 @@ Any device that can run Python is a node. More nodes = more signal paths = bette
 
 4-5 nodes                 8+ nodes
 
- Pi1------Pi2             Pi1---Pi2---Pi3
+ n1------n2             n1---n2---n3
   |\      /|               |\ / | \ /|
   | \    / |               | X  |  X |
   |  \  /  |               |/ \ | / \|
-  |   \/   |              Pi4---Pi5--Pi6
+  |   \/   |              n4---n5--n6
   |   /\   |               |\ / | \ /|
   |  /  \  |               | X  |  X |
   | /    \ |               |/ \ | / \|
- Pi3-----Pi4              Pi7---Pi8---Pi9
+ n3-----n4              n7---n8---n9
   6 links                 every pair connected
   per pair                dense signal coverage
 ```
@@ -190,7 +182,7 @@ Any device that can run Python is a node. More nodes = more signal paths = bette
 uv run senseye
 
 # Headless sensor node
-uv run senseye --headless --role fixed --name pi-kitchen
+uv run senseye --headless --role fixed --name kitchen
 
 # Calibrate the map (acoustic ping sequence)
 uv run senseye calibrate
