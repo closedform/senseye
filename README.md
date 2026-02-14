@@ -147,12 +147,41 @@ Live dashboard:
 
 Any device that can run Python is a node. More nodes = more signal paths = better resolution.
 
-| Nodes | What you get |
-|-------|-------------|
-| 1 (Mac only) | Motion detection on signal paths to router + BLE devices |
-| 2-3 | Zone-level motion tracking, room connectivity map |
-| 4-5 | Rough floor plan from signal attenuation, directional motion |
-| 8+ | Detailed room shapes, sub-room motion localization |
+```
+1 node                    2-3 nodes
+
+  Mac                     Mac-------Pi1
+   |                       |  \   /  |
+   |                       |   \ /   |
+ router                    |    X    |
+   |                       |   / \   |
+   |                       |  /   \  |
+ bulb                    router   bulb
+                         1 link    3 links
+                         per pair  per pair
+
+
+4-5 nodes                 8+ nodes
+
+ Pi1------Pi2             Pi1---Pi2---Pi3
+  |\      /|               |\ / | \ /|
+  | \    / |               | X  |  X |
+  |  \  /  |               |/ \ | / \|
+  |   \/   |              Pi4---Pi5--Pi6
+  |   /\   |               |\ / | \ /|
+  |  /  \  |               | X  |  X |
+  | /    \ |               |/ \ | / \|
+ Pi3-----Pi4              Pi7---Pi8---Pi9
+  6 links                 every pair connected
+  per pair                dense signal coverage
+```
+
+| Nodes | Signal paths | What you get |
+|-------|-------------|-------------|
+| 1 (Mac only) | sparse | Motion detection to router + BLE devices |
+| 2-3 | basic mesh | Zone-level tracking, room connectivity |
+| 4-5 | 6-10 links | Rough floor plan, directional motion |
+| 8+ | 28+ links | Detailed room shapes, sub-room localization |
 
 ## Quick start
 
