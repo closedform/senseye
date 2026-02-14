@@ -339,6 +339,24 @@ wheels = [
 ]
 
 [[package]]
+name = "pyobjc-framework-corewlan"
+version = "12.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyobjc-core" },
+    { name = "pyobjc-framework-cocoa" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/88/71/739a5d023566b506b3fd3d2412983faa95a8c16226c0dcd0f67a9294a342/pyobjc_framework_corewlan-12.1.tar.gz", hash = "sha256:a9d82ec71ef61f37e1d611caf51a4203f3dbd8caf827e98128a1afaa0fd2feb5", size = 32417, upload-time = "2025-11-14T10:14:41.921Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f5/74/4d8a52b930a276f6f9b4f3b1e07cd518cb6d923cb512e39c935e3adb0b86/pyobjc_framework_corewlan-12.1-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:3e3f2614eb37dfd6860d6a0683877c2f3b909758ef78b68e5f6b7ea9c858cc51", size = 9931, upload-time = "2025-11-14T09:47:20.849Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/31/3e9cf2c0ac3c979062958eae7a275b602515c9c76fd30680e1ee0fea82ae/pyobjc_framework_corewlan-12.1-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:5cba04c0550fc777767cd3a5471e4ed837406ab182d7d5c273bc5ce6ea237bfe", size = 9958, upload-time = "2025-11-14T09:47:22.474Z" },
+    { url = "https://files.pythonhosted.org/packages/c0/a4/b691e4d1730c16f8ea2f883712054961a3e45f40e1471c0edfc30f061c07/pyobjc_framework_corewlan-12.1-cp313-cp313-macosx_10_13_universal2.whl", hash = "sha256:aac949646953effdd36d2d21bc0ab645e58bb25deafe86c6e600b3cdcfc2228b", size = 9968, upload-time = "2025-11-14T09:47:24.454Z" },
+    { url = "https://files.pythonhosted.org/packages/88/2e/dbba1674e1629839f479c9d14b90c37ed3b5f76d3b6b3ad56af48951c45b/pyobjc_framework_corewlan-12.1-cp313-cp313t-macosx_10_13_universal2.whl", hash = "sha256:dae63c36affcc933c9161980e4fe7333e0c59c968174a00a75cb5f6e4ede10c6", size = 10115, upload-time = "2025-11-14T09:47:26.152Z" },
+    { url = "https://files.pythonhosted.org/packages/e8/e2/e89ea1ee92de17ec53087868d0466f6fd8174488b613a46528a3642aa41d/pyobjc_framework_corewlan-12.1-cp314-cp314-macosx_10_15_universal2.whl", hash = "sha256:336536ecfd503118f79c8337cc983bbf0768e3ba4ac142e0cf8db1408c644965", size = 10010, upload-time = "2025-11-14T09:47:27.827Z" },
+    { url = "https://files.pythonhosted.org/packages/15/df/e695f432dbfcd0fbfa416db21471091e94e921094a795b87cb9ebea423e5/pyobjc_framework_corewlan-12.1-cp314-cp314t-macosx_10_15_universal2.whl", hash = "sha256:fe6373e83e12be6854f7c1f054e2f68b41847fd739aa578d3c5478bd3fd4014f", size = 10162, upload-time = "2025-11-14T09:47:29.82Z" },
+]
+
+[[package]]
 name = "pyobjc-framework-libdispatch"
 version = "12.1"
 source = { registry = "https://pypi.org/simple" }
@@ -417,6 +435,7 @@ source = { editable = "." }
 dependencies = [
     { name = "bleak" },
     { name = "numpy" },
+    { name = "pyobjc-framework-corewlan", marker = "sys_platform == 'darwin'" },
     { name = "rich" },
     { name = "zeroconf" },
 ]
@@ -434,6 +453,7 @@ dev = [
 requires-dist = [
     { name = "bleak", specifier = ">=0.21.0" },
     { name = "numpy", specifier = ">=1.26.0" },
+    { name = "pyobjc-framework-corewlan", marker = "sys_platform == 'darwin'", specifier = ">=10.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "rich", specifier = ">=13.7.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.2.0" },

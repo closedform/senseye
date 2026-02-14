@@ -105,19 +105,82 @@ def _parse_iwlist_output(raw: str) -> list[Observation]:
     return results
 
 
+def _scan_wifi_corewlan() -> list[Observation]:
+    """Scan WiFi using macOS CoreWLAN framework (replaces deprecated airport command).
+
+    Without Location Services permission, BSSID/SSID are redacted. We still
+    get RSSI + channel for every nearby AP, which is enough for signal-based
+    sensing.  We use channel as a stable-ish identifier when BSSID is null
+    and always include the currently-connected network (whose info is available
+    regardless of permissions).
+    """
+    import CoreWLAN
+
+    iface = CoreWLAN.CWWiFiClient.sharedWiFiClient().interface()
+    if iface is None:
+        return []
+
+    now = time.time()
+    results: list[Observation] = []
+
+    # Current network info is always available
+    cur_bssid = iface.bssid()
+    cur_ssid = iface.ssid()
+    cur_rssi = iface.rssiValue()
+    if cur_bssid:
+        results.append(Observation(
+            device_id=cur_bssid.lower(),
+            rssi=float(cur_rssi),
+            timestamp=now,
+            signal_type=SignalType.WIFI,
+            metadata={"ssid": cur_ssid or "", "connected": True},
+        ))
+
+    networks, error = iface.scanForNetworksWithName_error_(None, None)
+    if error or not networks:
+        return results
+
+    # Track per-channel count to differentiate APs on same channel
+    ch_count: dict[int, int] = {}
+    for net in networks:
+        bssid = net.bssid()
+        ssid = net.ssid()
+        channel = net.wlanChannel()
+        ch_num = channel.channelNumber() if channel else 0
+
+        if bssid:
+            dev_id = bssid.lower()
+        elif ch_num:
+            # No BSSID due to privacy — use channel+index as pseudo-identifier
+            idx = ch_count.get(ch_num, 0)
+            ch_count[ch_num] = idx + 1
+            dev_id = f"wifi-ch{ch_num}-{idx}"
+        else:
+            continue
+
+        # Skip if this is the already-added connected network
+        if bssid and cur_bssid and bssid.lower() == cur_bssid.lower():
+            continue
+
+        results.append(Observation(
+            device_id=dev_id,
+            rssi=float(net.rssiValue()),
+            timestamp=now,
+            signal_type=SignalType.WIFI,
+            metadata={
+                "ssid": ssid or "",
+                "channel": ch_num,
+            },
+        ))
+    return results
+
+
 async def scan_wifi() -> list[Observation]:
     if _SYSTEM == "Darwin":
-        proc = await asyncio.create_subprocess_exec(
-            "/System/Library/PrivateFrameworks/Apple80211.framework"
-            "/Versions/Current/Resources/airport",
-            "-s",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        stdout, _ = await proc.communicate()
-        return _parse_airport_output(stdout.decode(errors="replace"))
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, _scan_wifi_corewlan)
     else:
-        # Linux: try iwlist first
+        # Linux: try iwlist
         proc = await asyncio.create_subprocess_exec(
             "iwlist", "wlan0", "scan",
             stdout=asyncio.subprocess.PIPE,

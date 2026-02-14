@@ -148,6 +148,9 @@ async def run(config: SenseyeConfig) -> None:
             for obs in observations:
                 filter_bank.update(config.node_id, obs.device_id, obs.rssi)
 
+            if observations:
+                log.debug("scanned %d signals", len(observations))
+
             # Infer locally
             node_positions = {}
             if floorplan is not None:

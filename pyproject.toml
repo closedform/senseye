@@ -8,6 +8,7 @@ dependencies = [
     "zeroconf>=0.131.0",
     "numpy>=1.26.0",
     "rich>=13.7.0",
+    "pyobjc-framework-CoreWLAN>=10.0; sys_platform == 'darwin'",
 ]
 
 [project.scripts]
