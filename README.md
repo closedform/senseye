@@ -65,12 +65,79 @@ $$
 
 ## How it works
 
-1. **Scan**: WiFi/BLE RSSI (+ optional acoustic observations).
-2. **Filter**: adaptive Kalman smoothing per source-target path.
-3. **Infer**: local link/device/zone beliefs with confidence.
-4. **Share**: peer mesh exchange via mDNS + TCP gossip relay.
-5. **Fuse**: consensus + robust trilateration + tomography.
-6. **Render**: terminal dashboard with static map + dynamic overlay.
+```
+                          ┌─────────────────────────────────────────────┐
+                          │              Node A                        │
+                          │                                            │
+  WiFi APs )))            │   ┌──────┐   ┌────────┐   ┌───────┐      │
+  BLE beacons )))───────▶ │   │ SCAN │──▶│ KALMAN │──▶│ INFER │      │
+  Acoustic chirps )))     │   └──────┘   └────────┘   └───┬───┘      │
+                          │                                │          │
+                          │              local belief       │          │
+                          │              {links, devices,   │          │
+                          │               zones, confidence}│          │
+                          └────────────────────────────────┼──────────┘
+                                                           │
+                                    ┌──────────────────────┼──────────────────────┐
+                                    │          GOSSIP MESH (mDNS + TCP)           │
+                                    │                      │                      │
+                                    │    ┌─────────────────┼─────────────────┐    │
+                                    │    │                 ▼                 │    │
+                                    │    │  ┌───────────────────────────┐    │    │
+                          ┌─────────┤    │  │     CONSENSUS FUSION      │    │    ├─────────┐
+                          │         │    │  │                           │    │    │         │
+                          │         │    │  │  beliefs ──▶ inv-var wt   │    │    │         │
+                          │         │    │  │  σ²=((1-c)/c)            │    │    │         │
+                          │         │    │  │  x̂ = Σwᵢxᵢ / Σwᵢ        │    │    │         │
+                          ▼         │    │  └─────────┬─────────────────┘    │    │         ▼
+                     ┌─────────┐    │    │            │                      │    │    ┌─────────┐
+                     │ Node B  │    │    │            ▼                      │    │    │ Node C  │
+                     │         │◀───┤    │  ┌─────────────────────┐         │    ├───▶│         │
+                     │  SCAN   │    │    │  │   TRILATERATION     │         │    │    │  SCAN   │
+                     │  KALMAN │    │    │  │                     │         │    │    │  KALMAN │
+                     │  INFER  │    │    │  │  Gauss-Newton +     │         │    │    │  INFER  │
+                     │         │────┤    │  │  Tukey biweight     │         │    ├────│         │
+                     └─────────┘    │    │  └─────────┬───────────┘         │    │    └─────────┘
+                                    │    │            │                      │    │
+                                    │    │            ▼                      │    │
+                                    │    │  ┌─────────────────────┐         │    │
+                                    │    │  │    TOMOGRAPHY       │         │    │
+                                    │    │  │                     │         │    │
+                                    │    │  │  ridge regression   │         │    │
+                                    │    │  │  attenuation grid   │         │    │
+                                    │    │  └─────────┬───────────┘         │    │
+                                    │    │            │                      │    │
+                                    │    └────────────┼──────────────────────┘    │
+                                    │                 │                           │
+                                    └─────────────────┼───────────────────────────┘
+                                                      │
+                                                      ▼
+                                    ┌─────────────────────────────────────┐
+                                    │           WORLD STATE              │
+                                    │                                    │
+                                    │  static map    dynamic overlay     │
+                                    │  ┌──────────┐  ┌───────────────┐  │
+                                    │  │ walls    │  │ device pos    │  │
+                                    │  │ rooms    │  │ motion zones  │  │
+                                    │  │ topology │  │ online nodes  │  │
+                                    │  └──────────┘  └───────────────┘  │
+                                    │                                    │
+                                    └──────────────┬──────────────────────┘
+                                                   │
+                                                   ▼
+                                    ┌─────────────────────────────────────┐
+                                    │         TERMINAL DASHBOARD         │
+                                    │                                    │
+                                    │  ┌─────────────────────────────┐  │
+                                    │  │  ┌───┐          ◈ node_a   │  │
+                                    │  │  │   │  room 0  ◈ node_b   │  │
+                                    │  │  │   ├────────┐            │  │
+                                    │  │  │   │ room 1 │ ● phone   │  │
+                                    │  │  └───┘        └────────────┘  │
+                                    │  │  ▓▓░░  motion  │ devices: 3  │  │
+                                    │  └─────────────────────────────┘  │
+                                    └─────────────────────────────────────┘
+```
 
 ## Quick start
 
