@@ -66,57 +66,54 @@ $$
 ## How it works
 
 ```
-  WiFi / BLE / Acoustic
-           |
-           v
-  +--------+--+    +----------+    +-----------+
-  |    SCAN   |--->|  KALMAN  |--->|   INFER   |
-  +--------+--+    +----------+    +-----+-----+
-                                         |
-            .............................|.............................
-            :        GOSSIP MESH         |                           :
-            :        (mDNS + TCP)        |                           :
-            :                            v                           :
-+---------+ :                 +-------------------+                  : +---------+
-| Node B  |<- - - - - - - - >|     CONSENSUS     |< - - - - - - - ->| Node C  |
-|         | :                 |  inverse-var wt   |                  : |         |
-| scan    | :                 |  agreement pen.   |                  : | scan    |
-| filter  | :                 +---------+---------+                  : | filter  |
-| infer   | :                           |                            : | infer   |
-+---------+ :                +----------+----------+                 : +---------+
-            :                |                     |                 :
-            :                v                     v                 :
-            :     +----------------+    +-------------------+        :
-            :     | TRILATERATION  |    |    TOMOGRAPHY     |        :
-            :     |                |    |                   |        :
-            :     | Gauss-Newton   |    | ridge regression  |        :
-            :     | Tukey biweight |    | attenuation grid  |        :
-            :     +--------+-------+    +---------+---------+        :
-            :              +----------+----------+                   :
-            :.............................|............................:
-                                         |
-                                         v
-                          +--------------+---------------+
-                          |         WORLD STATE          |
-                          |                              |
-                          |  static       dynamic        |
-                          |  ----------   ------------   |
-                          |  walls        device pos     |
-                          |  rooms        motion zones   |
-                          |  topology     online nodes   |
-                          +--------------+---------------+
-                                         |
-                                         v
-                          +--------------+---------------+
-                          |      TERMINAL DASHBOARD      |
-                          |                              |
-                          |  +-----+                     |
-                          |  |     | room 0   * node_a   |
-                          |  |     +-------+  * node_b   |
-                          |  |     |room 1 |  o phone    |
-                          |  +-----+-------+             |
-                          |  ## motion    3 devices       |
-                          +------------------------------+
+    WiFi/BLE/Acoustic signals
+               |
+               v
+        +--------------+
+        |     SCAN     |  per-node RF + acoustic observations
+        +--------------+
+               |
+               v
+        +--------------+
+        |    KALMAN    |  adaptive 2-state filter per link
+        +--------------+
+               |
+               v
+        +--------------+
+        |    INFER     |  local beliefs (links, devices, zones)
+        +--------------+
+               |
+               v
+  +---------------------------+
+  |       GOSSIP MESH         |  mDNS discovery + TCP relay
+  |                           |  sequence dedup + hop TTL
+  |  Node A <---> Node B      |
+  |    ^            ^         |
+  |    |            |         |
+  |    v            v         |
+  |  +-------------------+   |
+  |  |    CONSENSUS      |   |  inverse-variance fusion
+  |  +-------------------+   |  with agreement penalty
+  |      |            |      |
+  |      v            v      |
+  |  +--------+  +--------+  |
+  |  |TRILAT. |  | TOMO-  |  |  Gauss-Newton + Tukey biweight
+  |  |        |  | GRAPHY |  |  ridge regression on grid
+  |  +--------+  +--------+  |
+  +---------------------------+
+               |
+               v
+      +-----------------+
+      |   WORLD STATE   |
+      |                 |
+      |  static:        |  walls, rooms, topology
+      |  dynamic:       |  device pos, motion, nodes
+      +-----------------+
+               |
+               v
+      +-----------------+
+      |    DASHBOARD    |  live terminal UI
+      +-----------------+
 ```
 
 ## Quick start
