@@ -77,8 +77,11 @@ def apply_overrides(config: SenseyeConfig, overrides: dict) -> SenseyeConfig:
             config.node_role = NodeRole(value)
         elif key == "acoustic_mode" and isinstance(value, str):
             config.acoustic_mode = _parse_acoustic_mode(value)
-        elif key == "acoustic_interval" and isinstance(value, str):
-            config.acoustic_interval = _parse_acoustic_mode(value)
+        elif key == "acoustic_interval":
+            if isinstance(value, str):
+                config.acoustic_interval = parse_acoustic_interval(value)
+            elif isinstance(value, int | float):
+                config.acoustic_interval = float(value)
         elif key == "position" and isinstance(value, dict):
             config.position = Position(x=value["x"], y=value["y"])
         elif key == "data_dir" and isinstance(value, str):

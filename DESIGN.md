@@ -1,237 +1,456 @@
 # Senseye Design Document
 
-## Overview
+## 1. Overview
 
-Senseye is a distributed RF sensing system that maps an apartment and detects motion using commodity hardware. Every WiFi, BLE, and acoustic-capable device in the space acts as a sensor node. The system builds a static map of the apartment from signal attenuation patterns and overlays live motion detection on top.
+Senseye is a distributed RF/acoustic sensing system for indoor mapping and motion inference. Each node runs the same pipeline:
 
-## Core Principles
+`SCAN -> FILTER -> INFER -> SHARE -> FUSE -> UPDATE WORLD -> RENDER`
 
-1. **Every node is equal** — same codebase runs on Mac, Pi, or any Python-capable device
-2. **Local inference first** — each node processes its own data and shares beliefs, not raw readings
-3. **Graph-based fusion** — the signal topology IS the data structure. More nodes = more edges = better resolution
-4. **Static map, dynamic overlay** — the apartment layout is built once and refined rarely. Motion is ephemeral
-5. **Zero config** — nodes discover each other via mDNS. No IP addresses, no config files
-6. **Minimal dependencies** — `bleak` (BLE), `zeroconf` (mDNS), `numpy` (DSP/math), `rich` (terminal UI). That's it.
+The modeling stack is uncertainty-aware end-to-end:
 
-## Architecture
+- Adaptive 2-state Kalman filtering per link
+- Confidence-aware local inference
+- Inverse-variance consensus across peers
+- Robust weighted trilateration with outlier rejection
+- Confidence-weighted ridge tomography with adaptive regularization
+
+## 2. Code Map
 
 ```
 senseye/
-    node/                    # The autonomous sensor agent
-        scanner.py           # WiFi + BLE RSSI collection
-        acoustic.py          # Ultrasonic chirp TX/RX + echo profiling
-        filter.py            # Kalman filter per signal path
-        inference.py         # Local motion/zone/attenuation inference
-        peer.py              # mDNS discovery + TCP peer mesh
-        belief.py            # Belief state dataclass + serialization
-        __main__.py          # Entry point for headless nodes
-    fusion/                  # Distributed inference
-        consensus.py         # Weighted belief averaging across peers
-        tomography.py        # Radio Tomographic Imaging (attenuation field)
-        trilateration.py     # Device positioning when 3+ nodes observe it
-        acoustic_range.py    # Precise distances from ultrasonic chirp ToF
-        graph.py             # Signal graph: vertices (nodes/devices), edges (observations)
-    mapping/
-        static/              # Built once, refined rarely
-            layout.py        # MDS self-localization of fixed nodes
-            walls.py         # Wall inference from excess RF attenuation + echo
-            topology.py      # Room connectivity from motion path traces
-            floorplan.py     # Combined static map, serializable to disk
-        dynamic/             # Updated every cycle
-            motion.py        # Per-edge motion detection via RSSI variance
-            devices.py       # Mobile device position tracking
-            state.py         # Fused world state combining static + dynamic
-    ui/
-        renderer.py          # Static map -> character grid
-        overlay.py           # Motion + device overlay on static background
-        dashboard.py         # Live terminal dashboard (rich)
-    config.py                # Runtime configuration
-    protocol.py              # Wire format for peer communication
-    main.py                  # Entry point: python -m senseye
+  node/
+    scanner.py       # WiFi/BLE/acoustic observations
+    acoustic.py      # chirps, matched filter, ToF primitives
+    filter.py        # adaptive CV Kalman per signal path
+    inference.py     # local link/device/zone beliefs
+    peer.py          # mDNS + TCP mesh + gossip relay
+    belief.py        # belief dataclasses and serialization
+  fusion/
+    consensus.py     # uncertainty-weighted fusion
+    trilateration.py # robust weighted Gauss-Newton solver
+    tomography.py    # weighted ridge RTI reconstruction
+    runtime.py       # runtime wrappers over fusion modules
+    acoustic_range.py
+    graph.py
+  mapping/
+    static/
+      layout.py      # MDS localization + anchoring
+      walls.py
+      topology.py
+      floorplan.py
+    dynamic/
+      motion.py
+      devices.py
+      state.py
+  calibration.py     # active map calibration and reconstruction
+  main.py            # runtime loop and orchestration
 ```
 
-## Node Architecture
+## 3. Measurement Models
 
-Every node runs an identical pipeline:
+### 3.1 RF Path-Loss Model
 
-```
-SCAN → FILTER → INFER → SHARE → FUSE → (optional: RENDER)
-```
+For RSSI-to-distance inversion and expected free-space RSSI, Senseye uses:
 
-### Scan (scanner.py, acoustic.py)
+$$
+\text{RSSI}_{\text{expected}}(d) = -\left(10 n \log_{10}(d) + A\right)
+$$
 
-Collects raw signal observations from all available sensors:
+$$
+d = 10^{\frac{-\text{RSSI} - A}{10 n}}
+$$
 
-- **WiFi RSSI**: Signal strength to all visible access points. On macOS, uses CoreWLAN via the `airport` utility. On Linux, uses `iwlist` or `/proc/net/wireless`.
-- **BLE RSSI**: Signal strength to all BLE-advertising devices. Uses `bleak` (cross-platform). Captures manufacturer data and service UUIDs for device identification.
-- **Acoustic**: Ultrasonic chirp time-of-flight for precise ranging. Uses `numpy` for chirp generation (18-22kHz FMCW sweep) and matched filtering. Optional echo profiling for room geometry.
+where `n` is the path-loss exponent and `A` is the 1 m intercept (dBm magnitude). The canonical indoor parameters are defined in `inference.py`:
 
-All observations are timestamped and tagged with source type.
+- `PATHLOSS_N = 2.5` (indoor propagation)
+- `PATHLOSS_A = 45.0` (1 m reference level)
 
-### Filter (filter.py)
+During calibration wall detection, the free-space exponent `n = 2.0` is used instead so that all indoor propagation effects are visible as excess attenuation (see section 10).
 
-Each signal path (node→device or node→node) gets an independent Kalman filter:
+### 3.2 Acoustic ToF Model
 
-- State: estimated RSSI + rate of change
-- Measurement: raw RSSI reading
-- Output: smoothed RSSI, innovation (deviation from prediction)
-- Innovation spikes indicate environmental changes (motion, door opening, etc.)
+One-way distance from time-of-flight:
 
-The Kalman filter is a simple 1D filter per path. No complex state estimation.
+$$
+d = c \cdot t_{\text{tof}}
+$$
 
-### Infer (inference.py)
+with `c = 343 m/s` (approximate speed of sound at ~20 C), defined canonically in `node/acoustic.py` and re-exported by `fusion/acoustic_range.py`.
 
-Local inference produces beliefs about the environment:
+## 4. Per-Link Adaptive Kalman Filter (`node/filter.py`)
 
-- **Per-link motion**: RSSI variance in a sliding window exceeds threshold → motion on that path
-- **Per-link attenuation**: Stable RSSI below free-space prediction → obstruction (wall) on that path
-- **Zone estimation**: Bayesian update over room probabilities given all link observations
-- **Device tracking**: RSSI-based distance estimate for each observed device
+Each `(source_id, target_id)` path has a constant-velocity state:
 
-Output is a `Belief` dataclass (belief.py) containing:
-- Link states: {peer_id → (attenuation, motion, confidence)}
-- Device states: {device_id → (rssi, estimated_distance, moving)}
-- Zone beliefs: {zone_name → (occupied_probability, motion_probability)}
+$$
+\mathbf{x}_k =
+\begin{bmatrix}
+\text{rssi}_k \\
+\dot{\text{rssi}}_k
+\end{bmatrix},
+\quad
+\mathbf{F} =
+\begin{bmatrix}
+1 & dt \\
+0 & 1
+\end{bmatrix},
+\quad
+\mathbf{H} =
+\begin{bmatrix}
+1 & 0
+\end{bmatrix}
+$$
 
-### Share (peer.py)
+Continuous-acceleration-inspired process covariance:
 
-Nodes communicate over a TCP mesh:
+$$
+\mathbf{Q} = q
+\begin{bmatrix}
+\frac{dt^4}{4} & \frac{dt^3}{2} \\
+\frac{dt^3}{2} & dt^2
+\end{bmatrix}
+$$
 
-- **Discovery**: Each node registers a `_senseye._tcp.local.` mDNS service on startup
-- **Connection**: Nodes connect to all discovered peers via TCP
-- **Protocol**: Newline-delimited JSON (protocol.py). Each message is a serialized Belief
-- **Heartbeat**: Nodes send beliefs at a configurable rate (default: 1/sec)
-- **Reconnection**: Automatic reconnect on disconnect with exponential backoff
+Prediction/update:
 
-### Fuse (fusion/)
+$$
+\hat{\mathbf{x}}^-_k = \mathbf{F}\hat{\mathbf{x}}_{k-1},
+\quad
+\mathbf{P}^-_k = \mathbf{F}\mathbf{P}_{k-1}\mathbf{F}^T + \mathbf{Q}
+$$
 
-Each node independently fuses its own beliefs with received peer beliefs:
+$$
+\mathbf{y}_k = z_k - \mathbf{H}\hat{\mathbf{x}}^-_k,
+\quad
+\mathbf{S}_k = \mathbf{H}\mathbf{P}^-_k\mathbf{H}^T + R
+$$
 
-- **Consensus** (consensus.py): Weighted average of beliefs, weighted by confidence. Agreement between nodes amplifies confidence; disagreement flags uncertainty.
-- **Tomography** (tomography.py): Builds a spatial attenuation field from all node-to-node link attenuations. Cells where many high-attenuation links intersect → walls.
-- **Trilateration** (trilateration.py): When 3+ nodes observe the same device, estimate its (x,y) position via weighted least-squares.
-- **Acoustic ranging** (acoustic_range.py): Precise inter-node distances from ultrasonic chirp time-of-flight. Feeds into MDS layout.
+$$
+\mathbf{K}_k = \mathbf{P}^-_k\mathbf{H}^T\mathbf{S}_k^{-1},
+\quad
+\hat{\mathbf{x}}_k = \hat{\mathbf{x}}^-_k + \mathbf{K}_k\mathbf{y}_k
+$$
 
-## Static Map Generation
+Covariance update uses the **Joseph form** for numerical stability, guaranteeing symmetry and positive-definiteness:
 
-The static map represents the physical apartment layout. It updates only on explicit triggers.
+$$
+\mathbf{P}_k = (\mathbf{I}-\mathbf{K}_k\mathbf{H})\mathbf{P}^-_k(\mathbf{I}-\mathbf{K}_k\mathbf{H})^T + \mathbf{K}_k R \mathbf{K}_k^T
+$$
 
-### Building the Map
+Adaptive jump handling:
 
-```
-1. DISTANCE MATRIX
-   - RF: pairwise RSSI between all fixed nodes → rough distances (±2m)
-   - Acoustic: pairwise chirp ToF → precise distances (±1cm)
-   - Combined: acoustic when available, RF as fallback
+$$
+z\_\text{score} = \frac{|y_k|}{\sqrt{S_k}}
+$$
 
-2. NODE POSITIONS (layout.py)
-   - Classical MDS on distance matrix → relative (x,y) for each fixed node
-   - User anchors 1-2 nodes to fix rotation/reflection
-   - Refines as more nodes join
+If `z_score > threshold`, use `Q_scaled = scaling_factor * Q` for that step to quickly track abrupt environment changes.
 
-3. WALL DETECTION (walls.py)
-   - For each node pair: compare measured RSSI to free-space prediction at known distance
-   - Excess attenuation = obstruction on that path
-   - Tomographic reconstruction: project excess attenuation onto spatial grid
-   - Cells with high cumulative attenuation → walls
+## 5. Local Inference (`node/inference.py`)
 
-4. ROOM CONNECTIVITY (topology.py)
-   - Observe motion traces over time
-   - Sequential link attenuations reveal traversal paths
-   - Paths go through doorways, not walls
-   - Builds graph: rooms as vertices, doorways as edges
+### 5.1 Motion from Variance
 
-5. FLOOR PLAN (floorplan.py)
-   - Combines: node positions + wall grid + room connectivity + room labels
-   - Serializes to JSON on disk (~/.senseye/floorplan.json)
-   - Loaded on startup, recalculated only on trigger
-```
+For each device history window `W`:
 
-### Map Update Triggers
+$$
+\text{var}(W) = \frac{1}{|W|}\sum_{x \in W}(x-\bar{x})^2
+$$
 
-- `senseye calibrate` — user-initiated full recalibration with acoustic pings
-- New fixed node joins the mesh
-- Fixed node RSSI to peers shifts significantly (node was moved)
-- Scheduled acoustic ping (configurable: off / on-demand / 10m / 1h)
+Motion is detected when `var(W) > motion_threshold`.
 
-### Node Roles
+### 5.2 Link Attenuation
 
-- **Fixed**: Pi, router, Hue bulb, Apple TV — known positions, contributes to static map
-- **Mobile**: laptop, phone, watch — tracked ON the map, never part of it
+When node and target positions are known:
 
-## Dynamic Overlay
+$$
+\text{attenuation} = \max(0, \text{RSSI}_{\text{expected}}(d) - \text{RSSI}_{\text{filtered}})
+$$
 
-Updated every scan cycle (~1 second):
+### 5.3 Confidence Model
 
-- **Motion shading**: rooms/zones colored by motion intensity
-- **Device markers**: mobile devices plotted at estimated (x,y) or zone
-- **Trails**: optional motion trails showing recent device paths
-- **Status**: node health, map age, signal quality
+Local link confidence combines sample support and measurement quality:
 
-## Configuration (config.py)
+- Sample confidence:
 
-```python
-@dataclass
-class SenseyeConfig:
-    # Node identity
-    node_id: str            # auto-generated or user-set
-    node_role: NodeRole     # FIXED or MOBILE
-    position: Position | None  # (x, y) if known, None for auto
+$$
+c_{\text{samples}} = \min\left(\frac{N}{W}, 1\right)
+$$
 
-    # Scanning
-    wifi_enabled: bool = True
-    ble_enabled: bool = True
-    scan_interval: float = 1.0  # seconds
+- Innovation penalty:
 
-    # Acoustic
-    acoustic_mode: str = "on-demand"  # off | on-demand | 10m | 1h
-    chirp_freq_start: int = 18000     # Hz
-    chirp_freq_end: int = 22000       # Hz
-    chirp_duration: float = 0.01      # seconds
+$$
+p_{\text{innov}} = \frac{1}{1 + |\text{innovation}|/8}
+$$
 
-    # Networking
-    mesh_port: int = 5483
-    belief_rate: float = 1.0  # beliefs per second
+- RF confidence:
 
-    # UI
-    ui_enabled: bool = True
-    ui_refresh: float = 1.0  # seconds
-```
+$$
+c_{\text{rf}} = c_{\text{samples}} \cdot p_{\text{innov}}
+$$
 
-## Wire Protocol (protocol.py)
+- Acoustic confidence (uses SNR when available):
 
-Newline-delimited JSON over TCP. All messages have a type field:
+$$
+c_{\text{acoustic}} = 0.4 c_{\text{samples}} + 0.6 c_{\text{snr}}
+$$
+
+where `c_snr` is a clipped affine map of peak SNR.
+
+### 5.4 Zone Beliefs
+
+Given zone-crossing links, zone motion and occupancy use aggregate heuristics:
+
+$$
+P(\text{motion}|\text{zone}) = \frac{\#\text{moving links}}{\#\text{links}}
+$$
+
+$$
+P(\text{occupied}|\text{zone}) = \min\left(\frac{\text{avg attenuation}}{20\,\text{dB}}, 1\right)
+$$
+
+## 6. Peer Mesh and Gossip (`node/peer.py`, `main.py`)
+
+- Discovery: mDNS `_senseye._tcp.local.`
+- Transport: newline-delimited JSON over TCP
+- Relay control: `(node_id, sequence_number)` dedup + `hop_count` TTL
+
+Beliefs are relayed iff `hop_count > 0`, with `hop_count := hop_count - 1` on relay.
+
+## 7. Consensus Fusion (`fusion/consensus.py`)
+
+Let confidence `c in (0,1)` map to variance:
+
+$$
+\sigma^2(c) = \frac{1-c}{c} + \epsilon
+$$
+
+Precision:
+
+$$
+\pi(c) = \frac{1}{\sigma^2(c)}
+$$
+
+Weighted mean for scalar quantity `x`:
+
+$$
+\hat{x} = \frac{\sum_i \pi_i x_i}{\sum_i \pi_i}
+$$
+
+### 7.1 Link Fusion
+
+- `attenuation` and `motion probability` are precision-weighted averages.
+- Base fused confidence:
+
+$$
+c_{\text{base}} = \frac{\sum_i \pi_i}{1 + \sum_i \pi_i}
+$$
+
+- Disagreement penalty from weighted variance `v`:
+
+$$
+\text{penalty} = \frac{1}{1 + s v}
+$$
+
+$$
+c_{\text{fused}} = c_{\text{base}} \cdot \text{penalty}
+$$
+
+### 7.2 Device Fusion
+
+Device precision is derived from link confidence + range-based reliability. Distance estimates are additionally down-weighted by range squared:
+
+$$
+w_{d,i} = \frac{\pi_i}{\max(d_i,1)^2}
+$$
+
+This prevents long-range RSSI distance estimates from dominating.
+
+### 7.3 Zone Fusion
+
+Zone confidence proxy is derived from certainty away from 0.5:
+
+$$
+\text{certainty} = 2\max(|o-0.5|, |m-0.5|)
+$$
+
+Zone occupied/motion beliefs are fused with inverse-variance weighting using this proxy.
+
+## 8. Robust Trilateration (`fusion/trilateration.py`)
+
+Given anchors `a_i` and measured distances `d_i`, estimate position `x`.
+
+Residual:
+
+$$
+r_i(x) = ||x-a_i|| - d_i
+$$
+
+Range-dependent noise model:
+
+$$
+\sigma_i = \max(0.35, 0.08 d_i + 0.2)
+$$
+
+Base weight:
+
+$$
+w_i^{\text{base}} = \frac{1}{\sigma_i^2}
+$$
+
+Tukey robust factor with cutoff `c_i = 2.5 sigma_i`:
+
+$$
+\omega_i =
+\begin{cases}
+\left(1 - (|r_i|/c_i)^2\right)^2 & |r_i| < c_i \\
+0 & |r_i| \ge c_i
+\end{cases}
+$$
+
+Final IRLS weight: `w_i = w_i_base * omega_i`.
+
+Gauss-Newton step:
+
+$$
+\Delta = (J^T W J + \lambda I)^{-1} J^T W r,
+\quad
+x \leftarrow x - \Delta
+$$
+
+Outlier handling:
+
+- Evaluate full set and selected subsets (leave-one-out and size-3 subsets when small).
+- Score candidates by inlier count and clipped normalized residual score.
+- Refit on inliers (`|r_i|/sigma_i <= 2.5`) when possible.
+
+## 9. Tomographic Reconstruction (`fusion/tomography.py`)
+
+Build linear model over grid cells:
+
+$$
+A x \approx b
+$$
+
+- `x`: per-cell attenuation field
+- `b`: measured link excess attenuation
+- `A`: link-to-cell influence matrix (Gaussian kernel around each link segment)
+
+Each row is normalized so links contribute by spatial distribution, not raw row magnitude.
+
+Confidence weights use the same inverse-variance mapping as consensus fusion (section 7):
+
+$$
+W = \text{diag}\!\left(\frac{c_i}{1-c_i}\right)
+$$
+
+Weighted ridge objective:
+
+$$
+\min_x ||W^{1/2}(Ax-b)||_2^2 + \alpha ||x||_2^2
+$$
+
+Closed form:
+
+$$
+x^* = (A^T W A + \alpha I)^{-1} A^T W b
+$$
+
+Adaptive regularization:
+
+$$
+\alpha \propto \frac{n_{\text{cells}}}{n_{\text{links}}} (1 + \log_{10}(\kappa(A^TWA)))
+$$
+
+clipped to `[0.05, 5.0]`.
+
+## 10. Static Map Generation (`calibration.py`, `mapping/static/*`)
+
+### 10.1 Distance Fusion
+
+RF and acoustic distance matrices are merged with acoustic priority when available:
+
+$$
+D_{ij} =
+\begin{cases}
+D^{\text{acoustic}}_{ij}, & \text{if measured acoustically} \\
+D^{\text{rf}}_{ij}, & \text{otherwise}
+\end{cases}
+$$
+
+For unknown pairwise distances between non-reference nodes (where only distances to the reference are known), the expected distance under a uniform angular prior is used:
+
+$$
+\hat{D}_{ij} = \sqrt{D_{0i}^2 + D_{0j}^2}
+$$
+
+This follows from the law of cosines with `E[cos(theta)] = 0` over uniform `[0, 2pi]`.
+
+### 10.2 Wall Detection Model
+
+Calibration uses the free-space exponent `n = 2.0` (rather than the indoor `n = 2.5`) as the attenuation baseline. This maximizes sensitivity to structural obstructions because the free-space model predicts stronger signal at any given distance; any signal loss beyond this baseline is attributed to walls:
+
+$$
+\text{excess} = \max\!\left(0,\; \text{RSSI}_{\text{free-space}}(d) - \text{RSSI}_{\text{measured}}\right)
+$$
+
+The 1 m intercept `A = 45` is shared with the indoor model since it reflects hardware characteristics, not propagation environment.
+
+### 10.3 MDS Localization
+
+From pairwise distances `D`, classical MDS:
+
+$$
+B = -\frac{1}{2} J D^{\circ 2} J,
+\quad
+J = I - \frac{1}{n}\mathbf{1}\mathbf{1}^T
+$$
+
+Take top-2 eigenpairs of `B` for 2D coordinates, then anchor local node at `(0,0)`.
+
+### 10.4 Walls and Rooms
+
+- Link attenuation produces midpoint-perpendicular wall candidates.
+- Tomography peak cells also produce wall candidates.
+- Rooms are inferred by connectivity with wall intersections.
+
+## 11. Dynamic World Update (`mapping/dynamic/*`)
+
+Zone motion intensity decays exponentially:
+
+$$
+I_t = I_{t-1} e^{-\lambda dt}
+$$
+
+Then merged with current belief using:
+
+$$
+I_t \leftarrow \max(I_t, P_{\text{motion,zone}})
+$$
+
+Devices are assigned to nearest room center when position estimates exist.
+
+## 12. Recalibration Policy (`main.py`)
+
+Recalibration can be triggered by:
+
+- No floorplan
+- Peer set change
+- Interval acoustic schedule
+- RSSI drift
+
+Average RSSI drift against calibration baseline:
+
+$$
+\text{avg drift} = \frac{1}{|C|}\sum_{d \in C} |\text{RSSI}_{\text{now}}(d)-\text{RSSI}_{\text{baseline}}(d)|
+$$
+
+where `C` is the set of devices present in both snapshots. Drift triggers recalibration when enough common devices exist and drift exceeds threshold.
+
+## 13. Wire Protocol (`protocol.py`)
+
+Newline-delimited JSON messages:
 
 ```json
-{"type": "belief", "node_id": "...", "timestamp": ..., "links": {...}, "devices": {...}, "zones": {...}}
-{"type": "ping", "node_id": "...", "timestamp": ...}
-{"type": "calibrate", "node_id": "...", "sequence": [...]}
-{"type": "announce", "node_id": "...", "role": "fixed", "position": [x, y]}
+{"type":"announce","node_id":"..."}
+{"type":"belief","node_id":"...","timestamp":...,"sequence_number":...,"hop_count":...,"links":{...},"devices":{...},"zones":{...}}
+{"type":"acoustic_ping","request_id":"...","delay_s":0.2,"sample_rate":48000,"chirp_duration":0.01}
+{"type":"acoustic_pong","request_id":"...","ok":true,"error":""}
 ```
-
-No framing beyond newline. No versioning for now. Keep it simple.
-
-## Dependencies
-
-```
-bleak       # BLE scanning (cross-platform)
-zeroconf    # mDNS discovery (cross-platform)
-numpy       # DSP (chirp generation, matched filter, MDS, Kalman)
-rich        # Terminal UI (live dashboard)
-```
-
-Four packages. No frameworks, no message brokers, no databases.
-
-## Platform Support
-
-- **macOS**: WiFi via `airport` utility, BLE via `bleak` (CoreBluetooth), acoustic via `sounddevice` or `pyaudio`
-- **Linux (Pi)**: WiFi via `iwlist`/`iw`, BLE via `bleak` (BlueZ), acoustic via ALSA
-- **Headless**: `python -m senseye --headless` — no UI, no acoustic, just WiFi+BLE scanning and peer mesh
-
-## Design Constraints
-
-- No overengineering: if a simple approach works, use it. Three lines of repetition > premature abstraction.
-- No unnecessary error handling: trust internal code. Validate at boundaries (network input, user config).
-- No classes where a function suffices. No inheritance hierarchies. Dataclasses for data, functions for behavior.
-- Type hints on public interfaces. No docstrings on obvious code.
-- async throughout the node pipeline (scanning, networking, UI are all I/O-bound).

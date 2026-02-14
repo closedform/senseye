@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import socket
+import uuid
 from collections.abc import Callable
 from typing import Any
 
@@ -31,6 +32,13 @@ class PeerMesh:
         self._discovered: dict[str, tuple[str, int]] = {}
         # Callbacks for received beliefs
         self._belief_callbacks: list[Callable[[Belief], Any]] = []
+        # Callback invoked for incoming acoustic ping requests.
+        self._acoustic_ping_callbacks: list[Callable[[str, dict[str, Any]], Any]] = []
+        # request_id -> (peer_id, Future awaiting acoustic_pong response)
+        self._pending_acoustic: dict[
+            str,
+            tuple[str, asyncio.Future[dict[str, Any]]],
+        ] = {}
         # Tasks for per-peer read loops and reconnect loops
         self._peer_tasks: dict[str, asyncio.Task] = {}
         self._reconnect_tasks: dict[str, asyncio.Task] = {}
@@ -98,10 +106,18 @@ class PeerMesh:
             self._server.close()
             await self._server.wait_closed()
 
+        for _request_id, (_peer_id, future) in list(self._pending_acoustic.items()):
+            if not future.done():
+                future.cancel()
+        self._pending_acoustic.clear()
+
         log.info("PeerMesh stopped")
 
     def on_belief(self, callback: Callable[[Belief], Any]) -> None:
         self._belief_callbacks.append(callback)
+
+    def on_acoustic_ping(self, callback: Callable[[str, dict[str, Any]], Any]) -> None:
+        self._acoustic_ping_callbacks.append(callback)
 
     async def broadcast_belief(self, belief: Belief) -> None:
         msg = {"type": "belief", **belief.to_dict()}
@@ -119,6 +135,46 @@ class PeerMesh:
 
     def get_peers(self) -> list[str]:
         return list(self._peers.keys())
+
+    async def request_acoustic_ping(
+        self,
+        peer_id: str,
+        *,
+        delay_s: float = 0.2,
+        sample_rate: int = 48_000,
+        freq_start: int = 18_000,
+        freq_end: int = 22_000,
+        chirp_duration: float = 0.01,
+        timeout: float = 3.0,
+    ) -> dict[str, Any] | None:
+        """Request a peer to emit an acoustic chirp and await acknowledgement."""
+        request_id = uuid.uuid4().hex
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future[dict[str, Any]] = loop.create_future()
+        self._pending_acoustic[request_id] = (peer_id, future)
+
+        sent = await self._send_to_peer(
+            peer_id,
+            {
+                "type": "acoustic_ping",
+                "request_id": request_id,
+                "delay_s": delay_s,
+                "sample_rate": sample_rate,
+                "freq_start": freq_start,
+                "freq_end": freq_end,
+                "chirp_duration": chirp_duration,
+            },
+        )
+        if not sent:
+            self._pending_acoustic.pop(request_id, None)
+            return None
+
+        try:
+            return await asyncio.wait_for(future, timeout=timeout)
+        except asyncio.TimeoutError:
+            return None
+        finally:
+            self._pending_acoustic.pop(request_id, None)
 
     # -- mDNS --
 
@@ -168,7 +224,8 @@ class PeerMesh:
         if not peer_id or peer_id == self._node_id:
             return
 
-        host = info.parsed_addresses(IPVersion.V4Only)[0] if info.parsed_addresses(IPVersion.V4Only) else None
+        addresses = info.parsed_addresses(IPVersion.V4Only)
+        host = addresses[0] if addresses else None
         if not host:
             return
 
@@ -254,7 +311,8 @@ class PeerMesh:
     async def _read_loop(self, peer_id: str, mr: MessageReader) -> None:
         try:
             async for msg in mr:
-                if msg.get("type") == "belief":
+                msg_type = msg.get("type")
+                if msg_type == "belief":
                     try:
                         belief = Belief.from_dict(msg)
                     except (KeyError, TypeError, ValueError):
@@ -267,6 +325,10 @@ class PeerMesh:
                                 await result
                         except Exception:
                             log.exception("belief callback error")
+                elif msg_type == "acoustic_ping":
+                    await self._handle_acoustic_ping(peer_id, msg)
+                elif msg_type == "acoustic_pong":
+                    self._resolve_acoustic_pong(peer_id, msg)
         except (ConnectionError, OSError):
             log.debug("connection error reading from %s", peer_id)
         finally:
@@ -279,6 +341,13 @@ class PeerMesh:
             if peer_id not in self._peers:
                 return
             await self._close_peer(peer_id)
+
+        for request_id, (pending_peer, future) in list(self._pending_acoustic.items()):
+            if pending_peer != peer_id:
+                continue
+            if not future.done():
+                future.set_exception(ConnectionError(f"peer {peer_id} disconnected"))
+            self._pending_acoustic.pop(request_id, None)
 
         log.info("disconnected from %s", peer_id)
 
@@ -319,3 +388,55 @@ class PeerMesh:
             if await self._connect_to_peer(peer_id, host, port):
                 break
             delay = min(delay * 2, RECONNECT_MAX)
+
+    async def _send_to_peer(self, peer_id: str, message: dict[str, Any]) -> bool:
+        async with self._lock:
+            peer = self._peers.get(peer_id)
+        if peer is None:
+            return False
+        _, _, _, writer = peer
+        try:
+            await writer.write_message(message)
+            return True
+        except (ConnectionError, OSError):
+            await self._disconnect_peer(peer_id)
+            return False
+
+    async def _handle_acoustic_ping(self, peer_id: str, msg: dict[str, Any]) -> None:
+        request_id = msg.get("request_id")
+        if not isinstance(request_id, str) or not request_id:
+            return
+
+        ok = False
+        error: str | None = None
+        for callback in self._acoustic_ping_callbacks:
+            try:
+                result = callback(peer_id, msg)
+                if asyncio.iscoroutine(result):
+                    result = await result
+                if bool(result):
+                    ok = True
+            except Exception as exc:
+                error = str(exc)
+                log.exception("acoustic ping callback error")
+
+        response = {
+            "type": "acoustic_pong",
+            "request_id": request_id,
+            "ok": ok,
+            "error": error or "",
+        }
+        await self._send_to_peer(peer_id, response)
+
+    def _resolve_acoustic_pong(self, peer_id: str, msg: dict[str, Any]) -> None:
+        request_id = msg.get("request_id")
+        if not isinstance(request_id, str) or not request_id:
+            return
+        pending = self._pending_acoustic.get(request_id)
+        if pending is None:
+            return
+        pending_peer, future = pending
+        if pending_peer != peer_id:
+            return
+        if not future.done():
+            future.set_result(msg)

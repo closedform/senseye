@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import time
 from dataclasses import dataclass
 
 import numpy as np
-
 
 SPEED_OF_SOUND = 343.0  # m/s at ~20°C
 
@@ -17,14 +17,42 @@ DEFAULT_FREQ_END = 22_000    # Hz
 DEFAULT_CHIRP_DURATION = 0.01  # seconds
 DEFAULT_SAMPLE_RATE = 48_000  # Hz
 
+# Channel definitions
+CHANNEL_BASE_FREQ = 17_000
+CHANNEL_WIDTH = 1_000
+NUM_CHANNELS = 6
+
+
+def get_chirp_params(node_id: str) -> tuple[int, int]:
+    """Get frequency range for a node's deterministic channel.
+
+    Channels:
+      0: 17k - 18k
+      1: 18k - 19k
+      ...
+      5: 22k - 23k
+    """
+    # Deterministic hash to channel index
+    h = int(hashlib.sha256(node_id.encode()).hexdigest(), 16)
+    channel_idx = h % NUM_CHANNELS
+
+    f_start = CHANNEL_BASE_FREQ + (channel_idx * CHANNEL_WIDTH)
+    f_end = f_start + CHANNEL_WIDTH
+    return f_start, f_end
+
 
 def generate_chirp(
-    freq_start: int = DEFAULT_FREQ_START,
-    freq_end: int = DEFAULT_FREQ_END,
+    freq_start: int | None = None,
+    freq_end: int | None = None,
     duration: float = DEFAULT_CHIRP_DURATION,
     sample_rate: int = DEFAULT_SAMPLE_RATE,
 ) -> np.ndarray:
     """Generate an FMCW chirp signal (linear frequency sweep)."""
+    if freq_start is None:
+        freq_start = DEFAULT_FREQ_START
+    if freq_end is None:
+        freq_end = DEFAULT_FREQ_END
+
     n_samples = int(duration * sample_rate)
     t = np.linspace(0, duration, n_samples, endpoint=False)
     # Linear chirp: instantaneous frequency = freq_start + (freq_end - freq_start) * t / duration
@@ -85,6 +113,14 @@ class EchoProfile:
     peak_snr: float         # peak / noise floor ratio
     timestamp: float
     raw_correlation: np.ndarray
+
+
+@dataclass(frozen=True, slots=True)
+class ListenResult:
+    tof: float | None
+    peak_snr: float
+    record_started_at: float
+    timestamp: float
 
 
 def _try_import_sounddevice():
@@ -148,3 +184,114 @@ async def echo_profile(
         timestamp=now,
         raw_correlation=corr,
     )
+
+
+async def play_chirp(
+    chirp: np.ndarray | None = None,
+    sample_rate: int = DEFAULT_SAMPLE_RATE,
+    delay: float = 0.0,
+) -> bool:
+    """Play a chirp without recording. Returns False if audio backend is unavailable."""
+    sd = _try_import_sounddevice()
+    if sd is None:
+        return False
+
+    if chirp is None:
+        chirp = generate_chirp(sample_rate=sample_rate)
+
+    if delay > 0:
+        await asyncio.sleep(delay)
+
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(
+        None,
+        lambda: sd.play(
+            chirp,
+            samplerate=sample_rate,
+            blocking=True,
+        ),
+    )
+    return True
+
+
+async def listen_for_chirp(
+    chirp: np.ndarray | None = None,
+    sample_rate: int = DEFAULT_SAMPLE_RATE,
+    record_duration: float = 0.5,
+    template_length: int | None = None,
+) -> ListenResult | None:
+    """Record audio and detect chirp arrival via matched filter."""
+    sd = _try_import_sounddevice()
+    if sd is None:
+        return None
+
+    if chirp is None:
+        chirp = generate_chirp(sample_rate=sample_rate)
+    if template_length is None:
+        template_length = 0
+
+    n_record = int(record_duration * sample_rate)
+    loop = asyncio.get_running_loop()
+    record_started_at = loop.time()
+    recorded = await loop.run_in_executor(
+        None,
+        lambda: sd.rec(
+            n_record,
+            samplerate=sample_rate,
+            channels=1,
+            dtype="float32",
+            blocking=True,
+        ),
+    )
+    recorded = recorded.flatten()
+    corr = matched_filter(recorded, chirp)
+    tof = find_peak_tof(corr, sample_rate, template_length=template_length)
+
+    noise_floor = float(np.median(np.abs(corr))) + 1e-12
+    peak_val = float(np.max(np.abs(corr))) if len(corr) else 0.0
+    peak_snr = peak_val / noise_floor
+
+    return ListenResult(
+        tof=tof,
+        peak_snr=peak_snr,
+        record_started_at=record_started_at,
+        timestamp=time.time(),
+    )
+
+
+def identify_chirps(
+    recording: np.ndarray,
+    candidates: list[str],
+    sample_rate: int = DEFAULT_SAMPLE_RATE,
+) -> dict[str, float]:
+    """Identify which nodes are present in a recording.
+
+    Args:
+        recording: raw audio samples
+        candidates: list of node_ids to check for
+        sample_rate: audio sample rate
+
+    Returns:
+        dict of {node_id: peak_snr} for detected nodes (SNR > 3.0)
+    """
+    results = {}
+    for node_id in candidates:
+        f_start, f_end = get_chirp_params(node_id)
+        # Generate template for this node
+        template = generate_chirp(
+            freq_start=f_start,
+            freq_end=f_end,
+            sample_rate=sample_rate
+        )
+
+        corr = matched_filter(recording, template)
+
+        # Check for peak
+        peak_val = float(np.max(np.abs(corr))) if len(corr) else 0.0
+        noise_floor = float(np.median(np.abs(corr))) + 1e-12
+        snr = peak_val / noise_floor
+
+        if snr > 3.0:
+            results[node_id] = snr
+
+    return results

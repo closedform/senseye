@@ -2,9 +2,15 @@
 
 import sys
 
-# Inject --headless before parsing
-sys.argv.insert(1, "--headless")
 
-from senseye.main import main
+def main() -> None:
+    # Inject --headless before argument parsing.
+    if "--headless" not in sys.argv:
+        sys.argv.insert(1, "--headless")
+    from senseye.main import main as run_main
 
-main()
+    run_main()
+
+
+if __name__ == "__main__":
+    main()

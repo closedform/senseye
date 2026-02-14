@@ -85,8 +85,17 @@ def render_floorplan(plan: FloorPlan, width: int = 60, height: int = 30) -> Rend
     if usable_h < 1:
         usable_h = 1
 
-    scale_x = usable_w / w_range
-    scale_y = usable_h / h_range
+    scale_x_max = usable_w / w_range
+    scale_y_max = usable_h / h_range  # rows per meter
+
+    # Standard terminal char is ~2x taller than wide.
+    # To preserve aspect ratio: rows_per_meter should be ~0.5 * chars_per_meter
+    # So we want scale_y = 0.5 * scale_x
+    # We must satisfy: scale_x <= scale_x_max  AND  0.5 * scale_x <= scale_y_max
+    # => scale_x <= scale_x_max  AND  scale_x <= 2 * scale_y_max
+
+    scale_x = min(scale_x_max, 2.0 * scale_y_max)
+    scale_y = 0.5 * scale_x
 
     def world_to_grid(wx: float, wy: float) -> tuple[int, int] | None:
         gx = int(round((wx - x_min) * scale_x)) + 1

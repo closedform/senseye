@@ -92,7 +92,9 @@ def infer_rooms_from_nodes(
     # Merge nodes that have no wall between them
     for i in range(n):
         for j in range(i + 1, n):
-            if not _wall_between(node_positions[node_ids[i]], node_positions[node_ids[j]], wall_segments):
+            pos_i = node_positions[node_ids[i]]
+            pos_j = node_positions[node_ids[j]]
+            if not _wall_between(pos_i, pos_j, wall_segments):
                 union(i, j)
 
     # Group by root

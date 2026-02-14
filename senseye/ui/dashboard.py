@@ -6,12 +6,11 @@ import asyncio
 import time
 from typing import AsyncIterator
 
+from rich.console import Console
 from rich.layout import Layout
 from rich.live import Live
 from rich.panel import Panel
 from rich.text import Text
-
-from rich.console import Console
 
 from senseye.mapping.dynamic.state import WorldState
 from senseye.ui.overlay import compose

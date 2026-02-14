@@ -28,6 +28,8 @@ class ZoneBelief:
 class Belief:
     node_id: str
     timestamp: float = field(default_factory=time.time)
+    sequence_number: int = 0
+    hop_count: int = 3
     links: dict[str, LinkState] = field(default_factory=dict)
     devices: dict[str, DeviceState] = field(default_factory=dict)
     zones: dict[str, ZoneBelief] = field(default_factory=dict)
@@ -36,6 +38,8 @@ class Belief:
         return {
             "node_id": self.node_id,
             "timestamp": self.timestamp,
+            "sequence_number": self.sequence_number,
+            "hop_count": self.hop_count,
             "links": {
                 k: {"attenuation": v.attenuation, "motion": v.motion, "confidence": v.confidence}
                 for k, v in self.links.items()
@@ -59,6 +63,8 @@ class Belief:
         return cls(
             node_id=d["node_id"],
             timestamp=d["timestamp"],
+            sequence_number=d.get("sequence_number", 0),
+            hop_count=d.get("hop_count", 3),
             links={
                 k: LinkState(
                     attenuation=v["attenuation"],
@@ -80,3 +86,4 @@ class Belief:
                 for k, v in d.get("zones", {}).items()
             },
         )
+

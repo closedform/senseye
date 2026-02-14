@@ -30,7 +30,35 @@ class WorldState:
     timestamp: float = field(default_factory=time.time)
 
 
-def update_world(state: WorldState, belief: Belief, dt: float) -> WorldState:
+def _nearest_room(
+    floorplan: FloorPlan | None,
+    position: tuple[float, float] | None,
+) -> str | None:
+    if floorplan is None or position is None:
+        return None
+    best_name: str | None = None
+    best_dist = float("inf")
+    px, py = position
+    for room in floorplan.rooms.rooms:
+        if room.center is None:
+            continue
+        dx = px - room.center[0]
+        dy = py - room.center[1]
+        dist = dx * dx + dy * dy
+        if dist < best_dist:
+            best_dist = dist
+            best_name = room.name
+    return best_name
+
+
+def update_world(
+    state: WorldState,
+    belief: Belief,
+    dt: float,
+    device_positions: dict[str, tuple[float, float]] | None = None,
+    device_signal_types: dict[str, str] | None = None,
+    online_nodes: set[str] | None = None,
+) -> WorldState:
     """Single entry point for updating the dynamic layer from a fused belief.
 
     Updates motion state from zone beliefs, updates device info,
@@ -49,20 +77,37 @@ def update_world(state: WorldState, belief: Belief, dt: float) -> WorldState:
             state.devices[device_id] = existing
         existing.moving = dev_state.moving
         existing.last_seen = now
+        if device_positions and device_id in device_positions:
+            existing.position = device_positions[device_id]
+        if device_signal_types and device_id in device_signal_types:
+            existing.signal_type = device_signal_types[device_id]
+        label = state.floorplan.labels.get(device_id) if state.floorplan is not None else None
+        if label:
+            existing.name = label
+        zone = _nearest_room(state.floorplan, existing.position)
+        if zone is not None:
+            existing.zone = zone
 
-    # Upsert the reporting node
-    node = state.nodes.get(belief.node_id)
-    if node is None:
-        state.nodes[belief.node_id] = NodeInfo(
-            node_id=belief.node_id,
-            name=belief.node_id,
-            role="fixed",
-            online=True,
-            last_seen=now,
-        )
-    else:
+    # Upsert reporting nodes (local + peers seen in recent fusion window).
+    active_nodes = online_nodes or {belief.node_id}
+    for node_id in active_nodes:
+        node = state.nodes.get(node_id)
+        if node is None:
+            state.nodes[node_id] = NodeInfo(
+                node_id=node_id,
+                name=node_id,
+                role="fixed",
+                online=True,
+                last_seen=now,
+            )
+            continue
         node.online = True
         node.last_seen = now
+
+    # Mark stale nodes as offline.
+    for node in state.nodes.values():
+        if now - node.last_seen > 15.0:
+            node.online = False
 
     # Update map age
     if state.floorplan is not None:

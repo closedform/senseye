@@ -13,6 +13,7 @@ from enum import Enum
 class SignalType(Enum):
     WIFI = "wifi"
     BLE = "ble"
+    ACOUSTIC = "acoustic"
 
 
 @dataclass(frozen=True, slots=True)

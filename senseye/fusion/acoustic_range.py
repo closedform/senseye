@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-SPEED_OF_SOUND = 343.0  # m/s at ~20C
+from senseye.node.acoustic import SPEED_OF_SOUND  # single source of truth
 
 
 def build_distance_matrix(

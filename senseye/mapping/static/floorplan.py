@@ -12,7 +12,6 @@ import numpy as np
 from senseye.mapping.static.topology import Connection, Room, RoomGraph
 from senseye.mapping.static.walls import WallSegment
 
-
 DEFAULT_PATH = Path.home() / ".senseye" / "floorplan.json"
 
 
@@ -23,6 +22,8 @@ class FloorPlan:
     rooms: RoomGraph = field(default_factory=RoomGraph)
     bounds: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
     labels: dict[str, str] = field(default_factory=dict)
+    attenuation_grid: list[list[float]] = field(default_factory=list)
+    attenuation_resolution: float = 0.5
     calibrated_at: float = field(default_factory=time.time)
 
 
@@ -69,10 +70,11 @@ def _connection_to_dict(c: Connection) -> dict:
 
 
 def _connection_from_dict(d: dict) -> Connection:
+    doorway_position = d["doorway_position"]
     return Connection(
         room_a=d["room_a"],
         room_b=d["room_b"],
-        doorway_position=tuple(d["doorway_position"]) if d["doorway_position"] is not None else None,
+        doorway_position=tuple(doorway_position) if doorway_position is not None else None,
     )
 
 
@@ -86,6 +88,8 @@ def _plan_to_dict(plan: FloorPlan) -> dict:
         },
         "bounds": list(plan.bounds),
         "labels": plan.labels,
+        "attenuation_grid": plan.attenuation_grid,
+        "attenuation_resolution": plan.attenuation_resolution,
         "calibrated_at": plan.calibrated_at,
     }
 
@@ -101,6 +105,8 @@ def _plan_from_dict(d: dict) -> FloorPlan:
         ),
         bounds=tuple(d.get("bounds", [0.0, 0.0, 0.0, 0.0])),
         labels=d.get("labels", {}),
+        attenuation_grid=d.get("attenuation_grid", []),
+        attenuation_resolution=d.get("attenuation_resolution", 0.5),
         calibrated_at=d.get("calibrated_at", 0.0),
     )
 
