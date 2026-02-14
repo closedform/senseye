@@ -25,18 +25,11 @@ Each node runs: **scan** → **filter** → **infer** → **share** → **fuse**
 
 All nodes scan WiFi + BLE. Kalman-filtered RSSI gives distance estimates, attenuation reveals walls.
 
-```
-Result: blurry room graph
-
-  +---+       +---+
-  | ? |-------| ? |
-  +---+       +---+
-    |
-    |wall
-    |
-  +---+
-  | ? |
-  +---+
+```mermaid
+graph TD
+  A["Zone ?"] --- B["Zone ?"]
+  A ---|"high attenuation"| C["Zone ?"]
+  B ---|"weak evidence"| C
 ```
 
 ### PHASE 2: acoustic calibration (on demand)
@@ -48,18 +41,12 @@ All fixed nodes chirp in sequence (~30 seconds)
 → echo profiles give room dimensions
 → wall positions snap into focus
 
-```
-Result: real floor plan
-
-  +---------+---------+
-  | kitchen | hallway |
-  |  n1    |    *    |
-  |         +--   ----+
-  |              door |
-  +---------+---------+
-  | bedroom | living  |
-  |  n2    |  n3    |
-  +---------+---------+
+```mermaid
+graph TD
+  K["Kitchen (n1)"] --- H["Hallway"]
+  K --- B["Bedroom (n2)"]
+  H ---|"door"| L["Living (n3)"]
+  B --- L
 ```
 
 ### PHASE 3: motion-refined (passive, over hours)
@@ -67,106 +54,41 @@ Result: real floor plan
 Zone transitions from device tracking refine room connectivity.
 Doorways discovered from repeated cross-room movement patterns.
 
+```mermaid
+graph TD
+  K["Kitchen (low motion)"] --- H["Hallway"]
+  H ---|"doorway learned from transitions"| L["Living (high motion)"]
+  B["Bedroom (idle)"] --- L
+  P["Phone"] --> K
+  W["Watch"] --> L
 ```
-Live dashboard:
 
-  +---------+---------+
-  | kitchen | hallway |
-  |  *n1   |    *    |
-  |   o phone  ------+
-  |         |    door |
-  +---------+---------+
-  | bedroom | living  |
-  |  *n2   |  *n3   |
-  |         | oo watch|
-  +---------+---------+
-
-  motion: living ####  kitchen #
-  devices: 2 tracked  nodes: 3 online
-```
+`motion: living high, kitchen low • devices: 2 tracked • nodes: 3 online`
 
 ### Node pipeline
 
 Each node runs the same code. Beliefs flow through the gossip mesh into shared fusion.
 
-```
-                    +--------+    +--------+    +--------+
-  WiFi/BLE/acoustic | SCAN   |--->| KALMAN |--->| INFER  |
-  signals           +--------+    +--------+    +---+----+
-                                                    |
-              local belief: links, devices, zones,  |  confidence
-                                                    |
-          +=========================================+==========+
-          |                GOSSIP MESH                         |
-          |                mDNS + TCP                          |
-          |                seq dedup + hop TTL                 |
-          |                                                    |
-+---------+--+                                     +---------+-+
-| Node B     |          +-------------+            | Node C    |
-|            |<-------->|  CONSENSUS  |<---------->|           |
-| scan       |          |             |            | scan      |
-| kalman     |          | inv-var wt  |            | kalman    |
-| infer      |          | agreement   |            | infer     |
-|            |          | penalty     |            |           |
-+---------+--+          +------+------+            +---------+-+
-          |                    |                               |
-          |          +---------+---------+                     |
-          |          |                   |                     |
-          |    +-----+------+   +--------+-------+            |
-          |    |  TRILAT.   |   |   TOMOGRAPHY   |            |
-          |    |            |   |                 |            |
-          |    | Gauss-     |   | ridge regress.  |            |
-          |    | Newton +   |   | attenuation    |            |
-          |    | Tukey      |   | grid           |            |
-          |    +-----+------+   +--------+-------+            |
-          |          +----------+---------+                    |
-          |                     |                              |
-          +=====================+==============================+
-                                |
-                         +------+------+
-                         | WORLD STATE |
-                         |             |
-                         | static map  |
-                         | dynamic ovl |
-                         +------+------+
-                                |
-                         +------+------+
-                         |  DASHBOARD  |
-                         +-------------+
+```mermaid
+flowchart LR
+  S["WiFi/BLE/Acoustic Signals"] --> SCAN["Scan"]
+  SCAN --> KF["Adaptive Kalman"]
+  KF --> INF["Local Inference"]
+  INF --> BLF["Belief (links/devices/zones + confidence)"]
+  BLF --> MESH["Gossip Mesh (mDNS + TCP, seq dedup, hop TTL)"]
+  MESH --> CONS["Inverse-Variance Consensus"]
+  CONS --> TRI["Robust Trilateration"]
+  CONS --> TOMO["Weighted Ridge Tomography"]
+  TRI --> WORLD["World State (static map + dynamic overlay)"]
+  TOMO --> WORLD
+  WORLD --> UI["Dashboard"]
 ```
 
 ## Adding nodes
 
 Any device that can run Python is a node. More nodes = more signal paths = better resolution.
 
-```
-1 node                    2-3 nodes
-
-  n1                     n1-------n2
-   |                       |  \   /  |
-   |                       |   \ /   |
- router                    |    X    |
-   |                       |   / \   |
-   |                       |  /   \  |
- bulb                    router   bulb
-                         1 link    3 links
-                         per pair  per pair
-
-
-4-5 nodes                 8+ nodes
-
- n1------n2             n1---n2---n3
-  |\      /|               |\ / | \ /|
-  | \    / |               | X  |  X |
-  |  \  /  |               |/ \ | / \|
-  |   \/   |              n4---n5--n6
-  |   /\   |               |\ / | \ /|
-  |  /  \  |               | X  |  X |
-  | /    \ |               |/ \ | / \|
- n3-----n4              n7---n8---n9
-  6 links                 every pair connected
-  per pair                dense signal coverage
-```
+Approximate pairwise link growth (complete graph assumption): `links = N(N-1)/2`
 
 | Nodes | Signal paths | What you get |
 |-------|-------------|-------------|
