@@ -65,56 +65,94 @@ $$
 
 ## How it works
 
+Each node runs: **scan** → **filter** → **infer** → **share** → **fuse** → **render**
+
+### PHASE 1: passive RF sensing (automatic, continuous)
+
+All nodes scan WiFi + BLE. Kalman-filtered RSSI gives distance estimates, attenuation reveals walls.
+
 ```
-    WiFi/BLE/Acoustic signals
-               |
-               v
-        +--------------+
-        |     SCAN     |  per-node RF + acoustic observations
-        +--------------+
-               |
-               v
-        +--------------+
-        |    KALMAN    |  adaptive 2-state filter per link
-        +--------------+
-               |
-               v
-        +--------------+
-        |    INFER     |  local beliefs (links, devices, zones)
-        +--------------+
-               |
-               v
-  +---------------------------+
-  |       GOSSIP MESH         |  mDNS discovery + TCP relay
-  |                           |  sequence dedup + hop TTL
-  |  Node A <---> Node B      |
-  |    ^            ^         |
-  |    |            |         |
-  |    v            v         |
-  |  +-------------------+   |
-  |  |    CONSENSUS      |   |  inverse-variance fusion
-  |  +-------------------+   |  with agreement penalty
-  |      |            |      |
-  |      v            v      |
-  |  +--------+  +--------+  |
-  |  |TRILAT. |  | TOMO-  |  |  Gauss-Newton + Tukey biweight
-  |  |        |  | GRAPHY |  |  ridge regression on grid
-  |  +--------+  +--------+  |
-  +---------------------------+
-               |
-               v
-      +-----------------+
-      |   WORLD STATE   |
-      |                 |
-      |  static:        |  walls, rooms, topology
-      |  dynamic:       |  device pos, motion, nodes
-      +-----------------+
-               |
-               v
-      +-----------------+
-      |    DASHBOARD    |  live terminal UI
-      +-----------------+
+Result: blurry room graph
+
+  +---+       +---+
+  | ? |-------| ? |
+  +---+       +---+
+    |
+    |wall
+    |
+  +---+
+  | ? |
+  +---+
 ```
+
+### PHASE 2: acoustic calibration (on demand)
+
+User triggers: `senseye calibrate`
+All fixed nodes chirp in sequence (~30 seconds)
+→ precise distance matrix (cm-accurate)
+→ MDS gives accurate layout
+→ echo profiles give room dimensions
+→ wall positions snap into focus
+
+```
+Result: real floor plan
+
+  +---------+---------+
+  | kitchen | hallway |
+  |  Pi1    |    *    |
+  |         +--   ----+
+  |              door |
+  +---------+---------+
+  | bedroom | living  |
+  |  Pi2    |  Pi3    |
+  +---------+---------+
+```
+
+### PHASE 3: motion-refined (passive, over hours)
+
+Zone transitions from device tracking refine room connectivity.
+Doorways discovered from repeated cross-room movement patterns.
+
+```
+Live dashboard:
+
+  +---------+---------+
+  | kitchen | hallway |
+  |  *Pi1   |    *    |
+  |   o phone  ------+
+  |         |    door |
+  +---------+---------+
+  | bedroom | living  |
+  |  *Pi2   |  *Pi3   |
+  |         | oo watch|
+  +---------+---------+
+
+  motion: living ####  kitchen #
+  devices: 2 tracked  nodes: 3 online
+```
+
+### Pipeline
+
+```
+  scan --> kalman --> infer --> share --> fuse --> render
+                                 |         |
+                            gossip mesh    |
+                            (mDNS+TCP)     |
+                                      +----+----+
+                                      |         |
+                                   trilat.   tomography
+```
+
+## Adding nodes
+
+Any device that can run Python is a node. More nodes = more signal paths = better resolution.
+
+| Nodes | What you get |
+|-------|-------------|
+| 1 (Mac only) | Motion detection on signal paths to router + BLE devices |
+| 2-3 | Zone-level motion tracking, room connectivity map |
+| 4-5 | Rough floor plan from signal attenuation, directional motion |
+| 8+ | Detailed room shapes, sub-room motion localization |
 
 ## Quick start
 
@@ -123,24 +161,40 @@ $$
 uv run senseye
 
 # Headless sensor node
-uv run senseye --headless
+uv run senseye --headless --role fixed --name pi-kitchen
 
-# Calibrate floorplan
+# Calibrate the map (acoustic ping sequence)
 uv run senseye calibrate
 
 # Interval acoustic mode
 uv run senseye --acoustic 10m
 ```
 
+## Acoustic mode
+
+Nodes with speakers and microphones can ping each other ultrasonically (18-22kHz, inaudible) for centimeter-accurate distance measurement.
+
+```bash
+uv run senseye --acoustic off         # no chirps (default)
+uv run senseye --acoustic on-demand   # only during calibration
+uv run senseye --acoustic 10m         # ping every 10 minutes
+uv run senseye --acoustic 1h          # ping every hour
+```
+
 ## Architecture
 
 ```
 senseye/
-  node/         # scan, filter, infer, peer, belief
-  fusion/       # consensus, trilateration, tomography
-  mapping/      # static map + dynamic world state
-  calibration.py
-  main.py
+    node/           # scan, filter, infer, peer, belief
+    fusion/         # consensus, trilateration, tomography
+    mapping/
+        static/     # walls, rooms, topology (built once, refined rarely)
+        dynamic/    # device positions, motion (updated every second)
+    ui/             # terminal dashboard
+    calibration.py  # active map calibration
+    config.py       # runtime configuration
+    protocol.py     # wire format (newline-delimited JSON over TCP)
+    main.py         # entry point
 ```
 
 ## Requirements
