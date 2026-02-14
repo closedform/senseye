@@ -150,7 +150,7 @@ Any device that can run Python is a node. More nodes = more signal paths = bette
 ```
 1 node                    2-3 nodes
 
-  Mac                     Mac-------Pi1
+  Pi1                     Pi1-------Pi2
    |                       |  \   /  |
    |                       |   \ /   |
  router                    |    X    |
@@ -178,7 +178,7 @@ Any device that can run Python is a node. More nodes = more signal paths = bette
 
 | Nodes | Signal paths | What you get |
 |-------|-------------|-------------|
-| 1 (Mac only) | sparse | Motion detection to router + BLE devices |
+| 1 | sparse | Motion detection to router + BLE devices |
 | 2-3 | basic mesh | Zone-level tracking, room connectivity |
 | 4-5 | 6-10 links | Rough floor plan, directional motion |
 | 8+ | 28+ links | Detailed room shapes, sub-room localization |
