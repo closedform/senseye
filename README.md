@@ -25,11 +25,13 @@ Each node runs: **scan** → **filter** → **infer** → **share** → **fuse**
 
 All nodes scan WiFi + BLE. Kalman-filtered RSSI gives distance estimates, attenuation reveals walls.
 
+Result: coarse zone graph (numbered candidates)
+
 ```mermaid
-graph TD
-  A["Zone ?"] --- B["Zone ?"]
-  A ---|"high attenuation"| C["Zone ?"]
-  B ---|"weak evidence"| C
+flowchart LR
+  Z1["Zone 1 (candidate)"] ---|"strong link"| Z2["Zone 2 (candidate)"]
+  Z1 ---|"high attenuation"| Z3["Zone 3 (candidate)"]
+  Z2 -.->|"weak evidence"| Z3
 ```
 
 ### PHASE 2: acoustic calibration (on demand)
@@ -41,12 +43,14 @@ All fixed nodes chirp in sequence (~30 seconds)
 → echo profiles give room dimensions
 → wall positions snap into focus
 
+Result: structured floorplan
+
 ```mermaid
-graph TD
+flowchart TB
   K["Kitchen (n1)"] --- H["Hallway"]
-  K --- B["Bedroom (n2)"]
-  H ---|"door"| L["Living (n3)"]
-  B --- L
+  B["Bedroom (n2)"] --- L["Living (n3)"]
+  K --- B
+  H ---|"door"| L
 ```
 
 ### PHASE 3: motion-refined (passive, over hours)
@@ -55,10 +59,10 @@ Zone transitions from device tracking refine room connectivity.
 Doorways discovered from repeated cross-room movement patterns.
 
 ```mermaid
-graph TD
-  K["Kitchen (low motion)"] --- H["Hallway"]
-  H ---|"doorway learned from transitions"| L["Living (high motion)"]
-  B["Bedroom (idle)"] --- L
+flowchart LR
+  K["Kitchen (motion: low)"] --- H["Hallway"]
+  H ---|"doorway learned from transitions"| L["Living (motion: high)"]
+  B["Bedroom (motion: idle)"] --- L
   P["Phone"] --> K
   W["Watch"] --> L
 ```
@@ -70,7 +74,7 @@ graph TD
 Each node runs the same code. Beliefs flow through the gossip mesh into shared fusion.
 
 ```mermaid
-flowchart LR
+flowchart TD
   S["WiFi/BLE/Acoustic Signals"] --> SCAN["Scan"]
   SCAN --> KF["Adaptive Kalman"]
   KF --> INF["Local Inference"]
@@ -89,6 +93,41 @@ flowchart LR
 Any device that can run Python is a node. More nodes = more signal paths = better resolution.
 
 Approximate pairwise link growth (complete graph assumption): `links = N(N-1)/2`
+
+```mermaid
+flowchart TB
+  subgraph G1["1 fixed node"]
+    A1["n1"]
+  end
+
+  subgraph G3["2-3 fixed nodes (all-connected mesh)"]
+    B1["n1"] --- B2["n2"]
+    B1 --- B3["n3"]
+    B2 --- B3
+  end
+
+  subgraph G4["4-5 fixed nodes (all-connected mesh example)"]
+    C1["n1"] --- C2["n2"]
+    C1 --- C3["n3"]
+    C1 --- C4["n4"]
+    C2 --- C3
+    C2 --- C4
+    C3 --- C4
+  end
+
+  subgraph G8["8+ fixed nodes (all-connected pattern, shown with 5)"]
+    D1["n1"] --- D2["n2"]
+    D1 --- D3["n3"]
+    D1 --- D4["n4"]
+    D1 --- D5["n5"]
+    D2 --- D3
+    D2 --- D4
+    D2 --- D5
+    D3 --- D4
+    D3 --- D5
+    D4 --- D5
+  end
+```
 
 | Nodes | Signal paths | What you get |
 |-------|-------------|-------------|
