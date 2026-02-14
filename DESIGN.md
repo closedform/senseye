@@ -199,7 +199,7 @@ where `c_snr` is a clipped affine map of peak SNR.
 Given zone-crossing links, zone motion and occupancy use aggregate heuristics:
 
 $$
-P(\text{motion}|\text{zone}) = \frac{\#\text{moving links}}{\#\text{links}}
+P(\text{motion}|\text{zone}) = \frac{N_{\text{moving links}}}{N_{\text{links}}}
 $$
 
 $$
