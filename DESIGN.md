@@ -521,6 +521,17 @@ $$
 
 This follows from the law of cosines with `E[cos(theta)] = 0` over uniform `[0, 2pi]`.
 
+When peers share direct acoustic ranges, missing acoustic entries are daisy-chained over the peer graph with bounded-hop shortest paths:
+
+$$
+D^{\text{chain}}_{ij}
+=
+\min_{p \in \mathcal{P}_{ij},\; h(p)\le H}
+\sum_{(u,v)\in p} D^{\text{acoustic}}_{uv}
+$$
+
+with hop limit `H = 3`. Chained values are only used when a direct acoustic measurement for `(i,j)` is unavailable.
+
 ### 10.2 Wall Detection Model
 
 Calibration uses the free-space exponent `n = 2.0` (rather than the indoor `n = 2.5`) as the attenuation baseline. This maximizes sensitivity to structural obstructions because the free-space model predicts stronger signal at any given distance; any signal loss beyond this baseline is attributed to walls:
@@ -596,7 +607,7 @@ Newline-delimited JSON messages:
 
 ```json
 {"type":"announce","node_id":"..."}
-{"type":"belief","node_id":"...","timestamp":...,"sequence_number":...,"hop_count":...,"links":{...},"devices":{...},"zones":{...}}
+{"type":"belief","node_id":"...","timestamp":...,"sequence_number":...,"hop_count":...,"links":{...},"devices":{...},"zones":{...},"acoustic_ranges":{"peer-a":2.3}}
 {"type":"acoustic_ping","request_id":"...","delay_s":0.2,"sample_rate":48000,"freq_start":18000,"freq_end":19000,"chirp_duration":0.01}
 {"type":"acoustic_pong","request_id":"...","ok":true,"error":""}
 ```

@@ -92,6 +92,8 @@ Nodes with speakers and microphones can ping each other ultrasonically (18-22kHz
 
 Each audio-capable node also has a deterministic acoustic signature channel derived from `node_id` (hash-bucketed into 6 ultrasonic 1 kHz bands from 17-23 kHz). During peer ranging, listeners match against the expected peer signature band to identify emitters and reduce cross-node confusion.
 
+Direct peer acoustic ranges are gossiped and can be daisy-chained (bounded hop shortest paths) during calibration to propagate local measurements across the node graph when a direct pair measurement is missing.
+
 ```bash
 uv run senseye --acoustic off         # no chirps (default)
 uv run senseye --acoustic on-demand   # only during calibration
@@ -114,6 +116,15 @@ senseye/
     protocol.py     # wire format (newline-delimited JSON over TCP)
     main.py         # entry point
 ```
+
+## Next steps
+
+1. Harden the new acoustic daisy-chain flow into synchronized full-mesh calibration rounds so every node pair gets repeated direct measurements when possible.
+2. Add calibration quality gates (SNR thresholds, ToF sanity checks, and geometric consistency checks) and surface a calibration confidence score in the UI.
+3. Improve acoustic signature scalability with more channels and chirp-code separation so larger node counts have fewer collisions.
+4. Replace fixed RF model constants with per-node/per-environment calibration (`PATHLOSS_N`, intercept) learned during setup.
+5. Propagate uncertainty end-to-end into map and topology updates so low-confidence estimates are explicitly down-weighted in final outputs.
+6. Add a reproducible benchmark harness with logged datasets and metrics (layout error, device-position RMSE, motion/occupancy precision-recall).
 
 ## Requirements
 

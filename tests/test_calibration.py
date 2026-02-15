@@ -73,3 +73,21 @@ def test_build_floorplan_prefers_acoustic_distance_when_present() -> None:
     dist = (x * x + y * y) ** 0.5
     assert abs(dist - 2.0) < 0.2
     assert isinstance(plan.attenuation_grid, list)
+
+
+def test_build_floorplan_supports_daisy_chained_peer_distances() -> None:
+    plan, _baseline = build_floorplan_from_observations(
+        node_id="node-local",
+        node_name="living-pi",
+        observations=[],
+        peer_ids=["peer-a", "peer-b"],
+        peer_acoustic_distances={
+            ("node-local", "peer-a"): 1.0,
+            ("peer-a", "peer-b"): 1.0,
+        },
+        max_devices=0,
+    )
+
+    x, y = plan.node_positions["peer-b"]
+    dist = (x * x + y * y) ** 0.5
+    assert abs(dist - 2.0) < 0.7

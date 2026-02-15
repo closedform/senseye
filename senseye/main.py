@@ -449,6 +449,7 @@ async def run(config: SenseyeConfig) -> None:
             now = time.time()
             dt = now - last_time
             last_time = now
+            peer_observations: list[Observation] = []
 
             # Scan
             if config.wifi_enabled or config.ble_enabled:
@@ -496,6 +497,12 @@ async def run(config: SenseyeConfig) -> None:
             # Attach sequence number and reset hop count for OUR belief
             local_belief.sequence_number = local_sequence_number
             local_belief.hop_count = 3  # Default TTL
+            local_belief.acoustic_ranges = {
+                obs.device_id: float(distance)
+                for obs in peer_observations
+                for distance in [obs.metadata.get("distance_m")]
+                if isinstance(distance, int | float) and distance > 0
+            }
             local_sequence_number += 1
 
             # Share with peers
@@ -598,6 +605,7 @@ async def run(config: SenseyeConfig) -> None:
                     calibrated, baseline = await calibrate_floorplan(
                         config,
                         peer_ids=peer_ids,
+                        peer_beliefs=snapshot,
                         scans=_CALIBRATION_SCANS,
                         force_acoustic=interval_due,
                     )

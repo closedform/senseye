@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import logging
 import math
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 import numpy as np
 
 from senseye.config import AcousticMode, SenseyeConfig
-from senseye.fusion.acoustic_range import SPEED_OF_SOUND, build_distance_matrix, merge_distances
+from senseye.fusion.acoustic_range import (
+    SPEED_OF_SOUND,
+    build_distance_matrix,
+    merge_distances,
+    propagate_distances,
+)
 from senseye.fusion.tomography import LinkMeasurement
 from senseye.fusion.tomography import reconstruct as reconstruct_tomography
 from senseye.mapping.static.floorplan import FloorPlan
@@ -18,6 +23,7 @@ from senseye.mapping.static.layout import anchor_positions, mds_positions
 from senseye.mapping.static.topology import Room, RoomGraph, infer_rooms_from_nodes
 from senseye.mapping.static.walls import WallSegment, classify_material, detect_walls
 from senseye.node.acoustic import echo_profile, generate_chirp
+from senseye.node.belief import Belief
 from senseye.node.inference import PATHLOSS_A, PATHLOSS_N
 from senseye.node.scanner import Observation, SignalType, scan_all
 
@@ -32,6 +38,7 @@ _MAX_DISTANCE = 25.0
 _PATHLOSS_N_FREESPACE = 2.0
 _TOMOGRAPHY_RESOLUTION = 0.5
 _MAX_TOMOGRAPHY_WALLS = 40
+_ACOUSTIC_DAISY_CHAIN_HOPS = 3
 
 
 @dataclass
@@ -91,6 +98,30 @@ def _acoustic_distances(observations: list[Observation]) -> dict[str, float]:
         sums[obs.device_id] = sums.get(obs.device_id, 0.0) + float(raw_distance)
         counts[obs.device_id] = counts.get(obs.device_id, 0) + 1
     return {device_id: sums[device_id] / counts[device_id] for device_id in sums}
+
+
+def _peer_acoustic_distances(
+    peer_beliefs: Mapping[str, Belief] | None,
+    allowed_ids: set[str],
+) -> dict[tuple[str, str], float]:
+    if not peer_beliefs:
+        return {}
+
+    pair_to_distance: dict[tuple[str, str], float] = {}
+    for belief in peer_beliefs.values():
+        src = belief.node_id
+        if src not in allowed_ids:
+            continue
+        for tgt, distance in belief.acoustic_ranges.items():
+            if tgt not in allowed_ids or tgt == src:
+                continue
+            if not math.isfinite(distance) or distance <= 0:
+                continue
+            pair = (src, tgt) if src <= tgt else (tgt, src)
+            current = pair_to_distance.get(pair)
+            if current is None or distance < current:
+                pair_to_distance[pair] = float(distance)
+    return pair_to_distance
 
 
 def _rf_distance_matrix(
@@ -210,6 +241,7 @@ def build_floorplan_from_observations(
     node_name: str,
     observations: list[Observation],
     peer_ids: Iterable[str] = (),
+    peer_acoustic_distances: dict[tuple[str, str], float] | None = None,
     max_devices: int = 8,
     acoustic_extent: float | None = None,
 ) -> tuple[FloorPlan, dict[str, float]]:
@@ -261,7 +293,19 @@ def build_floorplan_from_observations(
         for device_id, distance in acoustic_distance_by_device.items()
         if device_id in node_ids
     }
-    distances_acoustic = build_distance_matrix(acoustic_tof, node_ids)
+    if peer_acoustic_distances:
+        for (src, tgt), distance in peer_acoustic_distances.items():
+            if src not in node_ids or tgt not in node_ids:
+                continue
+            if not math.isfinite(distance) or distance <= 0:
+                continue
+            acoustic_tof[(src, tgt)] = distance / SPEED_OF_SOUND
+
+    distances_acoustic_direct = build_distance_matrix(acoustic_tof, node_ids)
+    distances_acoustic = propagate_distances(
+        distances_acoustic_direct,
+        max_hops=_ACOUSTIC_DAISY_CHAIN_HOPS,
+    )
     distances = merge_distances(acoustic=distances_acoustic, rf=distances_rf)
 
     positions = anchor_positions(mds_positions(distances), anchors={0: (0.0, 0.0)})
@@ -362,10 +406,12 @@ def build_floorplan_from_observations(
 async def calibrate_floorplan(
     config: SenseyeConfig,
     peer_ids: Iterable[str] = (),
+    peer_beliefs: Mapping[str, Belief] | None = None,
     scans: int = 3,
     force_acoustic: bool = False,
 ) -> tuple[FloorPlan, dict[str, float]]:
     """Run active calibration using local scans and optional acoustic echo."""
+    peer_id_list = list(peer_ids)
     scan_count = max(scans, 1)
     observations: list[Observation] = []
     for _ in range(scan_count):
@@ -399,10 +445,14 @@ async def calibrate_floorplan(
         except Exception:
             log.debug("acoustic calibration unavailable", exc_info=True)
 
+    known_nodes = {config.node_id, *peer_id_list}
+    peer_acoustic_distances = _peer_acoustic_distances(peer_beliefs, known_nodes)
+
     return build_floorplan_from_observations(
         node_id=config.node_id,
         node_name=config.node_name,
         observations=observations,
-        peer_ids=peer_ids,
+        peer_ids=peer_id_list,
+        peer_acoustic_distances=peer_acoustic_distances,
         acoustic_extent=acoustic_extent,
     )

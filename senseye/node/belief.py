@@ -33,6 +33,7 @@ class Belief:
     links: dict[str, LinkState] = field(default_factory=dict)
     devices: dict[str, DeviceState] = field(default_factory=dict)
     zones: dict[str, ZoneBelief] = field(default_factory=dict)
+    acoustic_ranges: dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -56,6 +57,7 @@ class Belief:
                 k: {"occupied": v.occupied, "motion": v.motion}
                 for k, v in self.zones.items()
             },
+            "acoustic_ranges": dict(self.acoustic_ranges),
         }
 
     @classmethod
@@ -85,5 +87,8 @@ class Belief:
                 k: ZoneBelief(occupied=v["occupied"], motion=v["motion"])
                 for k, v in d.get("zones", {}).items()
             },
+            acoustic_ranges={
+                k: float(v) for k, v in d.get("acoustic_ranges", {}).items()
+                if isinstance(v, int | float)
+            },
         )
-
