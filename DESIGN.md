@@ -164,7 +164,7 @@ $$
 Adaptive jump handling:
 
 $$
-z\_\text{score} = \frac{|y_k|}{\sqrt{S_k}}
+z_{\text{score}} = \frac{|y_k|}{\sqrt{S_k}}
 $$
 
 If `z_score > threshold`, use `Q_scaled = scaling_factor * Q` for that step to quickly track abrupt environment changes.
@@ -243,10 +243,14 @@ Beliefs are relayed iff `hop_count > 0`, with `hop_count := hop_count - 1` on re
 
 ## 7. Consensus Fusion (`fusion/consensus.py`)
 
-Let confidence `c in (0,1)` map to variance:
+Let confidence `c in (0,1)` map to variance after implementation clamping:
 
 $$
-\sigma^2(c) = \frac{1-c}{c} + \epsilon
+c_{\text{eff}} = \min(\max(c, 0.01), 0.99)
+$$
+
+$$
+\sigma^2(c) = \frac{1-c_{\text{eff}}}{c_{\text{eff}}} + \epsilon
 $$
 
 Precision:
@@ -314,7 +318,13 @@ $$
 \text{certainty} = 2\max(|o-0.5|, |m-0.5|)
 $$
 
-Zone occupied/motion beliefs are fused with inverse-variance weighting using this proxy.
+Zone confidence used for fusion is:
+
+$$
+c_{\text{zone}} = \min(\max(0.2 + 0.8 \cdot \text{certainty}, 0.05), 0.99)
+$$
+
+Zone occupied/motion beliefs are fused with inverse-variance weighting using `c_zone`.
 
 ## 8. Robust Trilateration (`fusion/trilateration.py`)
 
@@ -323,7 +333,7 @@ Given anchors `a_i` and measured distances `d_i`, estimate position `x`.
 Residual:
 
 $$
-r_i(x) = ||x-a_i|| - d_i
+r_i(x) = \lVert x-a_i \rVert - d_i
 $$
 
 with `x = [x, y]^T` and anchor `a_i = [a_{x,i}, a_{y,i}]^T`.
@@ -350,7 +360,11 @@ $$
 \end{cases}
 $$
 
-Final IRLS weight: `w_i = w_i_base * omega_i`.
+Final IRLS weight:
+
+$$
+w_i = w_i^{\text{base}} \omega_i
+$$
 
 Gauss-Newton step:
 
@@ -364,18 +378,18 @@ Jacobian row for observation `i`:
 
 $$
 J_i =
-\begin{bmatrix}
-\frac{\partial r_i}{\partial x} &
+\left[
+\frac{\partial r_i}{\partial x},
 \frac{\partial r_i}{\partial y}
-\end{bmatrix}
+\right]
 =
-\begin{bmatrix}
-\frac{x-a_{x,i}}{\hat{d}_i} &
+\left[
+\frac{x-a_{x,i}}{\hat{d}_i},
 \frac{y-a_{y,i}}{\hat{d}_i}
-\end{bmatrix}
+\right]
 $$
 
-where `hat{d}_i = ||x-a_i||` with a small epsilon floor in implementation to avoid singularity.
+where `\hat{d}_i = \lVert x-a_i \rVert` with a small epsilon floor in implementation to avoid singularity.
 
 Outlier handling:
 
@@ -388,7 +402,7 @@ Normalized residual and score:
 $$
 \rho_i = \frac{|r_i|}{\sigma_i},
 \qquad
-\text{score} = \operatorname{mean}\left(\min(\rho_i^2, 9)\right)
+\text{score} = \frac{1}{N}\sum_{i=1}^{N}\min(\rho_i^2, 9)
 $$
 
 ## 9. Tomographic Reconstruction (`fusion/tomography.py`)
@@ -410,7 +424,7 @@ For link `i` and cell `j`, unnormalized influence is:
 $$
 \tilde{A}_{ij} =
 \begin{cases}
-\exp\!\left(-\frac{d_{ij}^2}{2\sigma_k^2}\right), & d_{ij} \le r \\
+e^{-\frac{d_{ij}^2}{2\sigma_k^2}}, & d_{ij} \le r \\
 0, & d_{ij} > r
 \end{cases}
 $$
@@ -426,13 +440,14 @@ $$
 Confidence weights use the same inverse-variance mapping as consensus fusion (section 7):
 
 $$
-W = \text{diag}\!\left(\frac{c_i}{1-c_i}\right)
+c_i^{\text{eff}} = \min(\max(c_i, 0.01), 0.99), \quad
+W = \text{diag}\left(\frac{c_i^{\text{eff}}}{1-c_i^{\text{eff}}}\right)
 $$
 
 Weighted ridge objective:
 
 $$
-\min_x ||W^{1/2}(Ax-b)||_2^2 + \alpha ||x||_2^2
+\min_x \lVert W^{1/2}(Ax-b) \rVert_2^2 + \alpha \lVert x \rVert_2^2
 $$
 
 Closed form:
@@ -485,7 +500,7 @@ This follows from the law of cosines with `E[cos(theta)] = 0` over uniform `[0, 
 Calibration uses the free-space exponent `n = 2.0` (rather than the indoor `n = 2.5`) as the attenuation baseline. This maximizes sensitivity to structural obstructions because the free-space model predicts stronger signal at any given distance; any signal loss beyond this baseline is attributed to walls:
 
 $$
-\text{excess} = \max\!\left(0,\; \text{RSSI}_{\text{free-space}}(d) - \text{RSSI}_{\text{measured}}\right)
+\text{excess} = \max\left(0,\; \text{RSSI}_{\text{free-space}}(d) - \text{RSSI}_{\text{measured}}\right)
 $$
 
 The 1 m intercept `A = 45` is shared with the indoor model since it reflects hardware characteristics, not propagation environment.
