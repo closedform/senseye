@@ -48,6 +48,21 @@ senseye/
 
 ## 3. Measurement Models
 
+### 3.0 Notation
+
+Common symbols used throughout:
+
+- `z_k`: measurement at step `k`
+- `x_k`: latent state at step `k`
+- `P_k`: state covariance
+- `r_i`: residual for observation `i`
+- `J`: Jacobian matrix of residuals
+- `W`: diagonal weight matrix
+- `A`: forward model / design matrix
+- `b`: measured observation vector
+- `x`: solved parameter vector (context-dependent)
+- `kappa(.)`: condition number
+
 ### 3.1 RF Path-Loss Model
 
 For RSSI-to-distance inversion and expected free-space RSSI, Senseye uses:
@@ -76,6 +91,8 @@ d = c \cdot t_{\text{tof}}
 $$
 
 with `c = 343 m/s` (approximate speed of sound at ~20 C), defined canonically in `node/acoustic.py` and re-exported by `fusion/acoustic_range.py`.
+
+In peer ranging, ToF is estimated from matched-filter peak timing after accounting for scheduled chirp delay and approximate network latency compensation.
 
 ## 4. Per-Link Adaptive Kalman Filter (`node/filter.py`)
 
@@ -130,6 +147,14 @@ $$
 \hat{\mathbf{x}}_k = \hat{\mathbf{x}}^-_k + \mathbf{K}_k\mathbf{y}_k
 $$
 
+Dimensions:
+
+- `x_k in R^2`
+- `F in R^{2x2}`
+- `H in R^{1x2}`
+- `P_k, Q in R^{2x2}`
+- `S_k, R in R^{1x1}`
+
 Covariance update uses the **Joseph form** for numerical stability, guaranteeing symmetry and positive-definiteness:
 
 $$
@@ -143,6 +168,8 @@ z\_\text{score} = \frac{|y_k|}{\sqrt{S_k}}
 $$
 
 If `z_score > threshold`, use `Q_scaled = scaling_factor * Q` for that step to quickly track abrupt environment changes.
+
+Interpretation: large normalized innovation means the constant-velocity prior is no longer adequate (e.g., abrupt path change), so process noise is temporarily increased to reduce lag.
 
 ## 5. Local Inference (`node/inference.py`)
 
@@ -253,6 +280,14 @@ $$
 c_{\text{fused}} = c_{\text{base}} \cdot \text{penalty}
 $$
 
+Weighted disagreement variance used in the penalty term:
+
+$$
+v = \frac{\sum_i \pi_i (x_i - \hat{x})^2}{\sum_i \pi_i}
+$$
+
+where `x_i` is per-peer attenuation and `hat{x}` is its weighted mean.
+
 ### 7.2 Device Fusion
 
 Device precision is derived from link confidence + range-based reliability. Distance estimates are additionally down-weighted by range squared:
@@ -262,6 +297,14 @@ w_{d,i} = \frac{\pi_i}{\max(d_i,1)^2}
 $$
 
 This prevents long-range RSSI distance estimates from dominating.
+
+Final device scalar estimates follow weighted means:
+
+$$
+\hat{rssi} = \frac{\sum_i w_i \, rssi_i}{\sum_i w_i},
+\qquad
+\hat{d} = \frac{\sum_i w_{d,i} \, d_i}{\sum_i w_{d,i}}
+$$
 
 ### 7.3 Zone Fusion
 
@@ -282,6 +325,8 @@ Residual:
 $$
 r_i(x) = ||x-a_i|| - d_i
 $$
+
+with `x = [x, y]^T` and anchor `a_i = [a_{x,i}, a_{y,i}]^T`.
 
 Range-dependent noise model:
 
@@ -315,11 +360,36 @@ $$
 x \leftarrow x - \Delta
 $$
 
+Jacobian row for observation `i`:
+
+$$
+J_i =
+\begin{bmatrix}
+\frac{\partial r_i}{\partial x} &
+\frac{\partial r_i}{\partial y}
+\end{bmatrix}
+=
+\begin{bmatrix}
+\frac{x-a_{x,i}}{\hat{d}_i} &
+\frac{y-a_{y,i}}{\hat{d}_i}
+\end{bmatrix}
+$$
+
+where `hat{d}_i = ||x-a_i||` with a small epsilon floor in implementation to avoid singularity.
+
 Outlier handling:
 
 - Evaluate full set and selected subsets (leave-one-out and size-3 subsets when small).
 - Score candidates by inlier count and clipped normalized residual score.
 - Refit on inliers (`|r_i|/sigma_i <= 2.5`) when possible.
+
+Normalized residual and score:
+
+$$
+\rho_i = \frac{|r_i|}{\sigma_i},
+\qquad
+\text{score} = \operatorname{mean}\left(\min(\rho_i^2, 9)\right)
+$$
 
 ## 9. Tomographic Reconstruction (`fusion/tomography.py`)
 
@@ -334,6 +404,24 @@ $$
 - `A`: link-to-cell influence matrix (Gaussian kernel around each link segment)
 
 Each row is normalized so links contribute by spatial distribution, not raw row magnitude.
+
+For link `i` and cell `j`, unnormalized influence is:
+
+$$
+\tilde{A}_{ij} =
+\begin{cases}
+\exp\!\left(-\frac{d_{ij}^2}{2\sigma_k^2}\right), & d_{ij} \le r \\
+0, & d_{ij} > r
+\end{cases}
+$$
+
+where `d_ij` is point-to-segment distance, `r` is influence radius, and `sigma_k = r/2`.
+
+Row normalization:
+
+$$
+A_{ij} = \frac{\tilde{A}_{ij}}{\sum_j \tilde{A}_{ij}}
+$$
 
 Confidence weights use the same inverse-variance mapping as consensus fusion (section 7):
 
@@ -353,6 +441,13 @@ $$
 x^* = (A^T W A + \alpha I)^{-1} A^T W b
 $$
 
+Equivalent whitened least-squares form used numerically:
+
+$$
+\bar{A} = W^{1/2}A,\quad \bar{b}=W^{1/2}b,\quad
+x^* = (\bar{A}^T\bar{A} + \alpha I)^{-1}\bar{A}^T\bar{b}
+$$
+
 Adaptive regularization:
 
 $$
@@ -360,6 +455,8 @@ $$
 $$
 
 clipped to `[0.05, 5.0]`.
+
+Practical role: when the inverse problem is underdetermined or ill-conditioned (many cells, few links), larger `alpha` suppresses unstable high-frequency artifacts in the attenuation map.
 
 ## 10. Static Map Generation (`calibration.py`, `mapping/static/*`)
 
@@ -404,6 +501,14 @@ J = I - \frac{1}{n}\mathbf{1}\mathbf{1}^T
 $$
 
 Take top-2 eigenpairs of `B` for 2D coordinates, then anchor local node at `(0,0)`.
+
+If `B = V \Lambda V^T` (eigendecomposition), coordinates are:
+
+$$
+X_{2D} = V_{:,1:2}\Lambda_{1:2,1:2}^{1/2}
+$$
+
+Negative eigenvalues from noisy/non-Euclidean distances are clamped to zero before square root.
 
 ### 10.4 Walls and Rooms
 
