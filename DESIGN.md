@@ -52,16 +52,16 @@ senseye/
 
 Common symbols used throughout:
 
-- `z_k`: measurement at step `k`
-- `x_k`: latent state at step `k`
-- `P_k`: state covariance
-- `r_i`: residual for observation `i`
-- `J`: Jacobian matrix of residuals
-- `W`: diagonal weight matrix
-- `A`: forward model / design matrix
-- `b`: measured observation vector
-- `x`: solved parameter vector (context-dependent)
-- `kappa(.)`: condition number
+- $z_k$: measurement at step $k$
+- $x_k$: latent state at step $k$
+- $P_k$: state covariance
+- $r_i$: residual for observation $i$
+- $J$: Jacobian matrix of residuals
+- $W$: diagonal weight matrix
+- $A$: forward model / design matrix
+- $b$: measured observation vector
+- $x$: solved parameter vector (context-dependent)
+- $\kappa(\cdot)$: condition number
 
 ### 3.1 RF Path-Loss Model
 
@@ -75,12 +75,12 @@ $$
 d = 10^{\frac{-\text{RSSI} - A}{10 n}}
 $$
 
-where `n` is the path-loss exponent and `A` is the 1 m intercept (dBm magnitude). The canonical indoor parameters are defined in `inference.py`:
+where $n$ is the path-loss exponent and $A$ is the 1 m intercept (dBm magnitude). The canonical indoor parameters are defined in `inference.py`:
 
 - `PATHLOSS_N = 2.5` (indoor propagation)
 - `PATHLOSS_A = 45.0` (1 m reference level)
 
-During calibration wall detection, the free-space exponent `n = 2.0` is used instead so that all indoor propagation effects are visible as excess attenuation (see section 10).
+During calibration wall detection, the free-space exponent $n = 2.0$ is used instead so that all indoor propagation effects are visible as excess attenuation (see section 10).
 
 ### 3.2 Acoustic ToF Model
 
@@ -90,13 +90,13 @@ $$
 d = c \cdot t_{\text{tof}}
 $$
 
-with `c = 343 m/s` (approximate speed of sound at ~20 C), defined canonically in `node/acoustic.py` and re-exported by `fusion/acoustic_range.py`.
+with $c = 343\,\text{m/s}$ (approximate speed of sound at ~20 C), defined canonically in `node/acoustic.py` and re-exported by `fusion/acoustic_range.py`.
 
 In peer ranging, ToF is estimated from matched-filter peak timing after accounting for scheduled chirp delay and approximate network latency compensation.
 
 ### 3.3 Acoustic Signature Channelization
 
-Each audio-capable node is assigned a deterministic chirp-band signature from its node identifier `i`:
+Each audio-capable node is assigned a deterministic chirp-band signature from its node identifier $i$:
 
 $$
 k = H(i) \bmod N_c
@@ -107,7 +107,7 @@ f_{\text{start}} = f_0 + k\Delta f, \quad
 f_{\text{end}} = f_{\text{start}} + \Delta f
 $$
 
-where `H` is SHA-256 interpreted as an integer, `N_c = 6`, `f0 = 17,000 Hz`, and `Delta f = 1,000 Hz`.
+where $H$ is SHA-256 interpreted as an integer, $N_c = 6$, $f_0 = 17{,}000\,\text{Hz}$, and $\Delta f = 1{,}000\,\text{Hz}$.
 
 This yields channels:
 
@@ -175,11 +175,11 @@ $$
 
 Dimensions:
 
-- `x_k in R^2`
-- `F in R^{2x2}`
-- `H in R^{1x2}`
-- `P_k, Q in R^{2x2}`
-- `S_k, R in R^{1x1}`
+- $x_k \in \mathbb{R}^2$
+- $F \in \mathbb{R}^{2\times 2}$
+- $H \in \mathbb{R}^{1\times 2}$
+- $P_k, Q \in \mathbb{R}^{2\times 2}$
+- $S_k, R \in \mathbb{R}^{1\times 1}$
 
 Covariance update uses the **Joseph form** for numerical stability, guaranteeing symmetry and positive-definiteness:
 
@@ -193,7 +193,7 @@ $$
 z_{\text{score}} = \frac{|y_k|}{\sqrt{S_k}}
 $$
 
-If `z_score > threshold`, use `Q_scaled = scaling_factor * Q` for that step to quickly track abrupt environment changes.
+If $z_{\text{score}} > \text{threshold}$, use $Q_{\text{scaled}} = \text{scaling\_factor}\,Q$ for that step to quickly track abrupt environment changes.
 
 Interpretation: large normalized innovation means the constant-velocity prior is no longer adequate (e.g., abrupt path change), so process noise is temporarily increased to reduce lag.
 
@@ -201,13 +201,13 @@ Interpretation: large normalized innovation means the constant-velocity prior is
 
 ### 5.1 Motion from Variance
 
-For each device history window `W`:
+For each device history window $W$:
 
 $$
 \text{var}(W) = \frac{1}{|W|}\sum_{x \in W}(x-\bar{x})^2
 $$
 
-Motion is detected when `var(W) > motion_threshold`.
+Motion is detected when $\mathrm{var}(W) > \text{motion\_threshold}$.
 
 ### 5.2 Link Attenuation
 
@@ -245,7 +245,7 @@ $$
 c_{\text{acoustic}} = 0.4 c_{\text{samples}} + 0.6 c_{\text{snr}}
 $$
 
-where `c_snr` is a clipped affine map of peak SNR.
+where $c_{\text{snr}}$ is a clipped affine map of peak SNR.
 
 ### 5.4 Zone Beliefs
 
@@ -269,7 +269,7 @@ Beliefs are relayed iff `hop_count > 0`, with `hop_count := hop_count - 1` on re
 
 ## 7. Consensus Fusion (`fusion/consensus.py`)
 
-Let confidence `c in (0,1)` map to variance after implementation clamping:
+Let confidence $c \in (0,1)$ map to variance after implementation clamping:
 
 $$
 c_{\text{eff}} = \min(\max(c, 0.01), 0.99)
@@ -285,7 +285,7 @@ $$
 \pi(c) = \frac{1}{\sigma^2(c)}
 $$
 
-Weighted mean for scalar quantity `x`:
+Weighted mean for scalar quantity $x$:
 
 $$
 \hat{x} = \frac{\sum_i \pi_i x_i}{\sum_i \pi_i}
@@ -300,7 +300,7 @@ $$
 c_{\text{base}} = \frac{\sum_i \pi_i}{1 + \sum_i \pi_i}
 $$
 
-- Disagreement penalty from weighted variance `v`:
+- Disagreement penalty from weighted variance $v$:
 
 $$
 \text{penalty} = \frac{1}{1 + s v}
@@ -316,7 +316,7 @@ $$
 v = \frac{\sum_i \pi_i (x_i - \hat{x})^2}{\sum_i \pi_i}
 $$
 
-where `x_i` is per-peer attenuation and `hat{x}` is its weighted mean.
+where $x_i$ is per-peer attenuation and $\hat{x}$ is its weighted mean.
 
 ### 7.2 Device Fusion
 
@@ -350,11 +350,11 @@ $$
 c_{\text{zone}} = \min(\max(0.2 + 0.8 \cdot \text{certainty}, 0.05), 0.99)
 $$
 
-Zone occupied/motion beliefs are fused with inverse-variance weighting using `c_zone`.
+Zone occupied/motion beliefs are fused with inverse-variance weighting using $c_{\text{zone}}$.
 
 ## 8. Robust Trilateration (`fusion/trilateration.py`)
 
-Given anchors `a_i` and measured distances `d_i`, estimate position `x`.
+Given anchors $a_i$ and measured distances $d_i$, estimate position $x$.
 
 Residual:
 
@@ -362,7 +362,7 @@ $$
 r_i(x) = \lVert x-a_i \rVert - d_i
 $$
 
-with `x = [x, y]^T` and anchor `a_i = [a_{x,i}, a_{y,i}]^T`.
+with $x = [x, y]^T$ and anchor $a_i = [a_{x,i}, a_{y,i}]^T$.
 
 Range-dependent noise model:
 
@@ -376,7 +376,7 @@ $$
 w_i^{\text{base}} = \frac{1}{\sigma_i^2}
 $$
 
-Tukey robust factor with cutoff `c_i = 2.5 sigma_i`:
+Tukey robust factor with cutoff $c_i = 2.5\,\sigma_i$:
 
 $$
 \omega_i =
@@ -400,7 +400,7 @@ $$
 x \leftarrow x - \Delta
 $$
 
-Jacobian row for observation `i`:
+Jacobian row for observation $i$:
 
 $$
 J_i = [ (x-a_{x,i})/\hat{d}_i,\ (y-a_{y,i})/\hat{d}_i ]
@@ -416,7 +416,7 @@ Outlier handling:
 
 - Evaluate full set and selected subsets (leave-one-out and size-3 subsets when small).
 - Score candidates by inlier count and clipped normalized residual score.
-- Refit on inliers (`|r_i|/sigma_i <= 2.5`) when possible.
+- Refit on inliers ($|r_i|/\sigma_i \le 2.5$) when possible.
 
 Normalized residual and score:
 
@@ -434,13 +434,13 @@ $$
 A x \approx b
 $$
 
-- `x`: per-cell attenuation field
-- `b`: measured link excess attenuation
-- `A`: link-to-cell influence matrix (Gaussian kernel around each link segment)
+- $x$: per-cell attenuation field
+- $b$: measured link excess attenuation
+- $A$: link-to-cell influence matrix (Gaussian kernel around each link segment)
 
 Each row is normalized so links contribute by spatial distribution, not raw row magnitude.
 
-For link `i` and cell `j`, unnormalized influence is:
+For link $i$ and cell $j$, unnormalized influence is:
 
 $$
 \tilde{A}_{ij} =
@@ -450,7 +450,7 @@ e^{-\frac{d_{ij}^2}{2\sigma_k^2}}, & d_{ij} \le r \\
 \end{cases}
 $$
 
-where `d_ij` is point-to-segment distance, `r` is influence radius, and `sigma_k = r/2`.
+where $d_{ij}$ is point-to-segment distance, $r$ is influence radius, and $\sigma_k = r/2$.
 
 Row normalization:
 
@@ -490,9 +490,9 @@ $$
 \alpha \propto \frac{n_{\text{cells}}}{n_{\text{links}}} (1 + \log_{10}(\kappa(A^TWA)))
 $$
 
-clipped to `[0.05, 5.0]`.
+clipped to $[0.05, 5.0]$.
 
-Practical role: when the inverse problem is underdetermined or ill-conditioned (many cells, few links), larger `alpha` suppresses unstable high-frequency artifacts in the attenuation map.
+Practical role: when the inverse problem is underdetermined or ill-conditioned (many cells, few links), larger $\alpha$ suppresses unstable high-frequency artifacts in the attenuation map.
 
 ## 10. Static Map Generation (`calibration.py`, `mapping/static/*`)
 
@@ -514,7 +514,7 @@ $$
 \hat{D}_{ij} = \sqrt{D_{0i}^2 + D_{0j}^2}
 $$
 
-This follows from the law of cosines with `E[cos(theta)] = 0` over uniform `[0, 2pi]`.
+This follows from the law of cosines with $E[\cos(\theta)] = 0$ over uniform $[0, 2\pi]$.
 
 When peers share direct acoustic ranges, missing acoustic entries are daisy-chained over the peer graph with bounded-hop shortest paths:
 
@@ -525,21 +525,21 @@ D^{\text{chain}}_{ij}
 \sum_{(u,v)\in p} D^{\text{acoustic}}_{uv}
 $$
 
-with hop limit `H = 3`. Chained values are only used when a direct acoustic measurement for `(i,j)` is unavailable.
+with hop limit $H = 3$. Chained values are only used when a direct acoustic measurement for $(i,j)$ is unavailable.
 
 ### 10.2 Wall Detection Model
 
-Calibration uses the free-space exponent `n = 2.0` (rather than the indoor `n = 2.5`) as the attenuation baseline. This maximizes sensitivity to structural obstructions because the free-space model predicts stronger signal at any given distance; any signal loss beyond this baseline is attributed to walls:
+Calibration uses the free-space exponent $n = 2.0$ (rather than the indoor $n = 2.5$) as the attenuation baseline. This maximizes sensitivity to structural obstructions because the free-space model predicts stronger signal at any given distance; any signal loss beyond this baseline is attributed to walls:
 
 $$
 \text{excess} = \max\left(0,\; \text{RSSI}_{\text{free-space}}(d) - \text{RSSI}_{\text{measured}}\right)
 $$
 
-The 1 m intercept `A = 45` is shared with the indoor model since it reflects hardware characteristics, not propagation environment.
+The 1 m intercept $A = 45$ is shared with the indoor model since it reflects hardware characteristics, not propagation environment.
 
 ### 10.3 MDS Localization
 
-From pairwise distances `D`, classical MDS:
+From pairwise distances $D$, classical MDS:
 
 $$
 B = -\frac{1}{2} J D^{\circ 2} J,
@@ -547,9 +547,9 @@ B = -\frac{1}{2} J D^{\circ 2} J,
 J = I - \frac{1}{n}\mathbf{1}\mathbf{1}^T
 $$
 
-Take top-2 eigenpairs of `B` for 2D coordinates, then anchor local node at `(0,0)`.
+Take top-2 eigenpairs of $B$ for 2D coordinates, then anchor local node at $(0,0)$.
 
-If `B = V \Lambda V^T` (eigendecomposition), coordinates are:
+If $B = V \Lambda V^T$ (eigendecomposition), coordinates are:
 
 $$
 X_{2D} = V_{:,1:2}\Lambda_{1:2,1:2}^{1/2}
@@ -594,7 +594,7 @@ $$
 \text{avg drift} = \frac{1}{|C|}\sum_{d \in C} |\text{RSSI}_{\text{now}}(d)-\text{RSSI}_{\text{baseline}}(d)|
 $$
 
-where `C` is the set of devices present in both snapshots. Drift triggers recalibration when enough common devices exist and drift exceeds threshold.
+where $C$ is the set of devices present in both snapshots. Drift triggers recalibration when enough common devices exist and drift exceeds threshold.
 
 ## 13. Wire Protocol (`protocol.py`)
 
