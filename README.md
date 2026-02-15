@@ -90,6 +90,8 @@ uv run senseye --acoustic 10m
 
 Nodes with speakers and microphones can ping each other ultrasonically (18-22kHz, inaudible) for centimeter-accurate distance measurement.
 
+Each audio-capable node also has a deterministic acoustic signature channel derived from `node_id` (hash-bucketed into 6 ultrasonic 1 kHz bands from 17-23 kHz). During peer ranging, listeners match against the expected peer signature band to identify emitters and reduce cross-node confusion.
+
 ```bash
 uv run senseye --acoustic off         # no chirps (default)
 uv run senseye --acoustic on-demand   # only during calibration

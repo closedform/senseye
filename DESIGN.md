@@ -94,6 +94,32 @@ with `c = 343 m/s` (approximate speed of sound at ~20 C), defined canonically in
 
 In peer ranging, ToF is estimated from matched-filter peak timing after accounting for scheduled chirp delay and approximate network latency compensation.
 
+### 3.3 Acoustic Signature Channelization
+
+Each audio-capable node is assigned a deterministic chirp-band signature from its `node_id`:
+
+$$
+k = H(\text{node\_id}) \bmod N_{\text{channels}}
+$$
+
+$$
+f_{\text{start}} = f_0 + k\Delta f, \quad
+f_{\text{end}} = f_{\text{start}} + \Delta f
+$$
+
+where `H` is SHA-256 interpreted as an integer, `N_channels = 6`, `f0 = 17,000 Hz`, and `Delta f = 1,000 Hz`.
+
+This yields channels:
+
+- `17-18 kHz`
+- `18-19 kHz`
+- `19-20 kHz`
+- `20-21 kHz`
+- `21-22 kHz`
+- `22-23 kHz`
+
+During peer ranging, the requesting node expects the target peer chirp on that peer's deterministic band and performs matched filtering against that signature template.
+
 ## 4. Per-Link Adaptive Kalman Filter (`node/filter.py`)
 
 Each `(source_id, target_id)` path has a constant-velocity state:
@@ -571,6 +597,6 @@ Newline-delimited JSON messages:
 ```json
 {"type":"announce","node_id":"..."}
 {"type":"belief","node_id":"...","timestamp":...,"sequence_number":...,"hop_count":...,"links":{...},"devices":{...},"zones":{...}}
-{"type":"acoustic_ping","request_id":"...","delay_s":0.2,"sample_rate":48000,"chirp_duration":0.01}
+{"type":"acoustic_ping","request_id":"...","delay_s":0.2,"sample_rate":48000,"freq_start":18000,"freq_end":19000,"chirp_duration":0.01}
 {"type":"acoustic_pong","request_id":"...","ok":true,"error":""}
 ```
