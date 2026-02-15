@@ -68,11 +68,11 @@ Common symbols used throughout:
 For RSSI-to-distance inversion and expected free-space RSSI, Senseye uses:
 
 $$
-\text{RSSI}_{\text{expected}}(d) = -\left(10 n \log_{10}(d) + A\right)
+\mathrm{RSSI}_{\mathrm{expected}}(d) = -\left(10 n \log_{10}(d) + A\right)
 $$
 
 $$
-d = 10^{\frac{-\text{RSSI} - A}{10 n}}
+d = 10^{\frac{-\mathrm{RSSI} - A}{10 n}}
 $$
 
 where $n$ is the path-loss exponent and $A$ is the 1 m intercept (dBm magnitude). The canonical indoor parameters are defined in `inference.py`:
@@ -82,21 +82,21 @@ where $n$ is the path-loss exponent and $A$ is the 1 m intercept (dBm magnitude)
 
 During calibration wall detection, the free-space exponent $n = 2.0$ is used instead so that all indoor propagation effects are visible as excess attenuation (see section 10).
 
-Plain-English relevance: this is the bridge from raw signal strength to a rough physical distance baseline, which is required before attenuation can be interpreted as likely obstruction or wall evidence.
+This is the bridge from raw signal strength to a rough physical distance baseline, which is required before attenuation can be interpreted as likely obstruction or wall evidence.
 
 ### 3.2 Acoustic ToF Model
 
 One-way distance from time-of-flight:
 
 $$
-d = c \cdot t_{\text{tof}}
+d = c \cdot t_{\mathrm{tof}}
 $$
 
-with $c = 343\,\text{m/s}$ (approximate speed of sound at ~20 C), defined canonically in `node/acoustic.py` and re-exported by `fusion/acoustic_range.py`.
+with $c = 343\,\mathrm{m/s}$ (approximate speed of sound at ~20 °C), defined canonically in `node/acoustic.py` and re-exported by `fusion/acoustic_range.py`.
 
 In peer ranging, ToF is estimated from matched-filter peak timing after accounting for scheduled chirp delay and approximate network latency compensation.
 
-Plain-English relevance: acoustic ToF gives much tighter distance estimates than RSSI, so it is the key source of geometric accuracy during calibration.
+Acoustic ToF gives much tighter distance estimates than RSSI, so it is the key source of geometric accuracy during calibration.
 
 ### 3.3 Acoustic Signature Channelization
 
@@ -107,11 +107,11 @@ k = H(i) \bmod N_c
 $$
 
 $$
-f_{\text{start}} = f_0 + k\Delta f, \quad
-f_{\text{end}} = f_{\text{start}} + \Delta f
+f_{\mathrm{start}} = f_0 + k\Delta f, \quad
+f_{\mathrm{end}} = f_{\mathrm{start}} + \Delta f
 $$
 
-where $H$ is SHA-256 interpreted as an integer, $N_c = 6$, $f_0 = 17{,}000\,\text{Hz}$, and $\Delta f = 1{,}000\,\text{Hz}$.
+where $H$ is SHA-256 interpreted as an integer, $N_c = 6$, $f_0 = 17{,}000\,\mathrm{Hz}$, and $\Delta f = 1{,}000\,\mathrm{Hz}$.
 
 This yields channels:
 
@@ -124,7 +124,7 @@ This yields channels:
 
 During peer ranging, the requesting node expects the target peer chirp on that peer's deterministic band and performs matched filtering against that signature template.
 
-Plain-English relevance: per-node acoustic signatures reduce emitter ambiguity, so simultaneous or nearby chirps are less likely to be misattributed.
+Per-node acoustic signatures reduce emitter ambiguity, so simultaneous or nearby chirps are less likely to be misattributed.
 
 ## 4. Per-Link Adaptive Kalman Filter (`node/filter.py`)
 
@@ -133,8 +133,8 @@ Each `(source_id, target_id)` path has a constant-velocity state:
 $$
 \mathbf{x}_k =
 \begin{bmatrix}
-\text{rssi}_k \\
-\dot{\text{rssi}}_k
+\mathrm{rssi}_k \\
+\dot{\mathrm{rssi}}_k
 \end{bmatrix},
 \quad
 \mathbf{F} =
@@ -196,14 +196,14 @@ $$
 Adaptive jump handling:
 
 $$
-z_{\text{score}} = \frac{|y_k|}{\sqrt{S_k}}
+z_{\mathrm{score}} = \frac{|y_k|}{\sqrt{S_k}}
 $$
 
-If $z_{\text{score}} > \text{threshold}$, use $Q_{\text{scaled}} = \text{scaling\_factor}\,Q$ for that step to quickly track abrupt environment changes.
+If $z_{\mathrm{score}} > \mathrm{threshold}$, use $Q_{\mathrm{scaled}} = \mathrm{scaling\_factor}\,Q$ for that step to quickly track abrupt environment changes.
 
 Interpretation: large normalized innovation means the constant-velocity prior is no longer adequate (e.g., abrupt path change), so process noise is temporarily increased to reduce lag.
 
-Plain-English relevance: this keeps link estimates stable when noise is small, but still lets the system react quickly when the environment actually changes.
+This keeps link estimates stable when noise is small, but still lets the system react quickly when the environment actually changes.
 
 ## 5. Local Inference (`node/inference.py`)
 
@@ -212,17 +212,17 @@ Plain-English relevance: this keeps link estimates stable when noise is small, b
 For each device history window $W$:
 
 $$
-\text{var}(W) = \frac{1}{|W|}\sum_{x \in W}(x-\bar{x})^2
+\mathrm{var}(W) = \frac{1}{|W|}\sum_{x \in W}(x-\bar{x})^2
 $$
 
-Motion is detected when $\mathrm{var}(W) > \text{motion\_threshold}$.
+Motion is detected when $\mathrm{var}(W) > \mathrm{motion\_threshold}$.
 
 ### 5.2 Link Attenuation
 
 When node and target positions are known:
 
 $$
-\text{attenuation} = \max(0, \text{RSSI}_{\text{expected}}(d) - \text{RSSI}_{\text{filtered}})
+\mathrm{attenuation} = \max(0, \mathrm{RSSI}_{\mathrm{expected}}(d) - \mathrm{RSSI}_{\mathrm{filtered}})
 $$
 
 ### 5.3 Confidence Model
@@ -232,42 +232,42 @@ Local link confidence combines sample support and measurement quality:
 - Sample confidence:
 
 $$
-c_{\text{samples}} = \min\left(\frac{N}{W}, 1\right)
+c_{\mathrm{samples}} = \min\left(\frac{N}{W}, 1\right)
 $$
 
 - Innovation penalty:
 
 $$
-p_{\text{innov}} = \frac{1}{1 + |\text{innovation}|/8}
+p_{\mathrm{innov}} = \frac{1}{1 + |\mathrm{innovation}|/8}
 $$
 
 - RF confidence:
 
 $$
-c_{\text{rf}} = c_{\text{samples}} \cdot p_{\text{innov}}
+c_{\mathrm{rf}} = c_{\mathrm{samples}} \cdot p_{\mathrm{innov}}
 $$
 
 - Acoustic confidence (uses SNR when available):
 
 $$
-c_{\text{acoustic}} = 0.4 c_{\text{samples}} + 0.6 c_{\text{snr}}
+c_{\mathrm{acoustic}} = 0.4 c_{\mathrm{samples}} + 0.6 c_{\mathrm{snr}}
 $$
 
-where $c_{\text{snr}}$ is a clipped affine map of peak SNR.
+where $c_{\mathrm{snr}}$ is a clipped affine map of peak SNR.
 
 ### 5.4 Zone Beliefs
 
 Given zone-crossing links, zone motion and occupancy use aggregate heuristics:
 
 $$
-P(\text{motion}|\text{zone}) = \frac{N_{\text{moving links}}}{N_{\text{links}}}
+P(\mathrm{motion}|\mathrm{zone}) = \frac{N_{\mathrm{moving\ links}}}{N_{\mathrm{links}}}
 $$
 
 $$
-P(\text{occupied}|\text{zone}) = \min\left(\frac{\text{avg attenuation}}{20\,\text{dB}}, 1\right)
+P(\mathrm{occupied}|\mathrm{zone}) = \min\left(\frac{\mathrm{avg\ attenuation}}{20\,\mathrm{dB}}, 1\right)
 $$
 
-Plain-English relevance: this stage converts noisy per-device/per-link measurements into actionable local semantics like "motion" and "occupancy" that downstream fusion can combine.
+This stage converts noisy per-device/per-link measurements into actionable local semantics like "motion" and "occupancy" that downstream fusion can combine.
 
 ## 6. Peer Mesh and Gossip (`node/peer.py`, `main.py`)
 
@@ -277,18 +277,18 @@ Plain-English relevance: this stage converts noisy per-device/per-link measureme
 
 Beliefs are relayed iff `hop_count > 0`, with `hop_count := hop_count - 1` on relay.
 
-Plain-English relevance: gossip + TTL gives each node enough shared context for fusion without flooding the network or creating belief loops.
+Gossip plus TTL gives each node enough shared context for fusion without flooding the network or creating belief loops.
 
 ## 7. Consensus Fusion (`fusion/consensus.py`)
 
 Let confidence $c \in (0,1)$ map to variance after implementation clamping:
 
 $$
-c_{\text{eff}} = \min(\max(c, 0.01), 0.99)
+c_{\mathrm{eff}} = \min(\max(c, 0.01), 0.99)
 $$
 
 $$
-\sigma^2(c) = \frac{1-c_{\text{eff}}}{c_{\text{eff}}} + \epsilon
+\sigma^2(c) = \frac{1-c_{\mathrm{eff}}}{c_{\mathrm{eff}}} + \epsilon
 $$
 
 Precision:
@@ -309,17 +309,17 @@ $$
 - Base fused confidence:
 
 $$
-c_{\text{base}} = \frac{\sum_i \pi_i}{1 + \sum_i \pi_i}
+c_{\mathrm{base}} = \frac{\sum_i \pi_i}{1 + \sum_i \pi_i}
 $$
 
 - Disagreement penalty from weighted variance $v$:
 
 $$
-\text{penalty} = \frac{1}{1 + s v}
+\mathrm{penalty} = \frac{1}{1 + s v}
 $$
 
 $$
-c_{\text{fused}} = c_{\text{base}} \cdot \text{penalty}
+c_{\mathrm{fused}} = c_{\mathrm{base}} \cdot \mathrm{penalty}
 $$
 
 Weighted disagreement variance used in the penalty term:
@@ -353,18 +353,18 @@ $$
 Zone confidence proxy is derived from certainty away from 0.5:
 
 $$
-\text{certainty} = 2\max(|o-0.5|, |m-0.5|)
+\mathrm{certainty} = 2\max(|o-0.5|, |m-0.5|)
 $$
 
 Zone confidence used for fusion is:
 
 $$
-c_{\text{zone}} = \min(\max(0.2 + 0.8 \cdot \text{certainty}, 0.05), 0.99)
+c_{\mathrm{zone}} = \min(\max(0.2 + 0.8 \cdot \mathrm{certainty}, 0.05), 0.99)
 $$
 
-Zone occupied/motion beliefs are fused with inverse-variance weighting using $c_{\text{zone}}$.
+Zone occupied/motion beliefs are fused with inverse-variance weighting using $c_{\mathrm{zone}}$.
 
-Plain-English relevance: consensus lets multiple imperfect nodes agree on a single estimate while naturally trusting high-confidence peers more than low-confidence ones.
+Consensus lets multiple imperfect nodes agree on a single estimate while naturally trusting high-confidence peers more than low-confidence ones.
 
 ## 8. Robust Trilateration (`fusion/trilateration.py`)
 
@@ -387,7 +387,7 @@ $$
 Base weight:
 
 $$
-w_i^{\text{base}} = \frac{1}{\sigma_i^2}
+w_i^{\mathrm{base}} = \frac{1}{\sigma_i^2}
 $$
 
 Tukey robust factor with cutoff $c_i = 2.5\,\sigma_i$:
@@ -403,7 +403,7 @@ $$
 Final IRLS weight:
 
 $$
-w_i = w_i^{\text{base}} \omega_i
+w_i = w_i^{\mathrm{base}} \omega_i
 $$
 
 Gauss-Newton step:
@@ -437,10 +437,10 @@ Normalized residual and score:
 $$
 \rho_i = \frac{|r_i|}{\sigma_i},
 \qquad
-\text{score} = \frac{1}{N}\sum_{i=1}^{N}\min(\rho_i^2, 9)
+\mathrm{score} = \frac{1}{N}\sum_{i=1}^{N}\min(\rho_i^2, 9)
 $$
 
-Plain-English relevance: robust trilateration keeps position estimates usable even when some range inputs are wrong, stale, or multipath-corrupted.
+Robust trilateration keeps position estimates usable even when some range inputs are wrong, stale, or multipath-corrupted.
 
 ## 9. Tomographic Reconstruction (`fusion/tomography.py`)
 
@@ -477,8 +477,8 @@ $$
 Confidence weights use the same inverse-variance mapping as consensus fusion (section 7):
 
 $$
-c_i^{\text{eff}} = \min(\max(c_i, 0.01), 0.99), \quad
-W = \text{diag}\left(\frac{c_i^{\text{eff}}}{1-c_i^{\text{eff}}}\right)
+c_i^{\mathrm{eff}} = \min(\max(c_i, 0.01), 0.99), \quad
+W = \mathrm{diag}\left(\frac{c_i^{\mathrm{eff}}}{1-c_i^{\mathrm{eff}}}\right)
 $$
 
 Weighted ridge objective:
@@ -503,14 +503,14 @@ $$
 Adaptive regularization:
 
 $$
-\alpha \propto \frac{n_{\text{cells}}}{n_{\text{links}}} (1 + \log_{10}(\kappa(A^TWA)))
+\alpha \propto \frac{n_{\mathrm{cells}}}{n_{\mathrm{links}}} (1 + \log_{10}(\kappa(A^TWA)))
 $$
 
 clipped to $[0.05, 5.0]$.
 
 Practical role: when the inverse problem is underdetermined or ill-conditioned (many cells, few links), larger $\alpha$ suppresses unstable high-frequency artifacts in the attenuation map.
 
-Plain-English relevance: tomography turns many link-level attenuations into a spatial heatmap, which is what allows wall and obstruction structure to appear in map space.
+Tomography turns many link-level attenuations into a spatial heatmap, which is what allows wall and obstruction structure to appear in map space.
 
 ## 10. Static Map Generation (`calibration.py`, `mapping/static/*`)
 
@@ -521,8 +521,8 @@ RF and acoustic distance matrices are merged with acoustic priority when availab
 $$
 D_{ij} =
 \begin{cases}
-D^{\text{acoustic}}_{ij}, & \text{if measured acoustically} \\
-D^{\text{rf}}_{ij}, & \text{otherwise}
+D^{\mathrm{acoustic}}_{ij}, & \mathrm{if\ measured\ acoustically} \\
+D^{\mathrm{rf}}_{ij}, & \mathrm{otherwise}
 \end{cases}
 $$
 
@@ -537,10 +537,10 @@ This follows from the law of cosines with $E[\cos(\theta)] = 0$ over uniform $[0
 When peers share direct acoustic ranges, missing acoustic entries are daisy-chained over the peer graph with bounded-hop shortest paths:
 
 $$
-D^{\text{chain}}_{ij}
+D^{\mathrm{chain}}_{ij}
 =
 \min_{p \in \mathcal{P}_{ij},\; h(p)\le H}
-\sum_{(u,v)\in p} D^{\text{acoustic}}_{uv}
+\sum_{(u,v)\in p} D^{\mathrm{acoustic}}_{uv}
 $$
 
 with hop limit $H = 3$. Chained values are only used when a direct acoustic measurement for $(i,j)$ is unavailable.
@@ -550,7 +550,7 @@ with hop limit $H = 3$. Chained values are only used when a direct acoustic meas
 Calibration uses the free-space exponent $n = 2.0$ (rather than the indoor $n = 2.5$) as the attenuation baseline. This maximizes sensitivity to structural obstructions because the free-space model predicts stronger signal at any given distance; any signal loss beyond this baseline is attributed to walls:
 
 $$
-\text{excess} = \max\left(0,\; \text{RSSI}_{\text{free-space}}(d) - \text{RSSI}_{\text{measured}}\right)
+\mathrm{excess} = \max\left(0,\; \mathrm{RSSI}_{\mathrm{free-space}}(d) - \mathrm{RSSI}_{\mathrm{measured}}\right)
 $$
 
 The 1 m intercept $A = 45$ is shared with the indoor model since it reflects hardware characteristics, not propagation environment.
@@ -581,7 +581,7 @@ Negative eigenvalues from noisy/non-Euclidean distances are clamped to zero befo
 - Tomography peak cells also produce wall candidates.
 - Rooms are inferred by connectivity with wall intersections.
 
-Plain-English relevance: this stage converts abstract signal evidence into a human-usable floorplan representation (walls, rooms, and topology).
+This stage converts abstract signal evidence into a human-usable floorplan representation (walls, rooms, and topology).
 
 ## 11. Dynamic World Update (`mapping/dynamic/*`)
 
@@ -594,12 +594,12 @@ $$
 Then merged with current belief using:
 
 $$
-I_t \leftarrow \max(I_t, P_{\text{motion,zone}})
+I_t \leftarrow \max(I_t, P_{\mathrm{motion,zone}})
 $$
 
 Devices are assigned to nearest room center when position estimates exist.
 
-Plain-English relevance: dynamic updates keep the map useful after calibration by continuously layering live motion and device activity onto static geometry.
+Dynamic updates keep the map useful after calibration by continuously layering live motion and device activity onto static geometry.
 
 ## 12. Recalibration Policy (`main.py`)
 
@@ -613,12 +613,12 @@ Recalibration can be triggered by:
 Average RSSI drift against calibration baseline:
 
 $$
-\text{avg drift} = \frac{1}{|C|}\sum_{d \in C} |\text{RSSI}_{\text{now}}(d)-\text{RSSI}_{\text{baseline}}(d)|
+\mathrm{avg\ drift} = \frac{1}{|C|}\sum_{d \in C} |\mathrm{RSSI}_{\mathrm{now}}(d)-\mathrm{RSSI}_{\mathrm{baseline}}(d)|
 $$
 
 where $C$ is the set of devices present in both snapshots. Drift triggers recalibration when enough common devices exist and drift exceeds threshold.
 
-Plain-English relevance: automatic recalibration is what prevents the map from silently degrading as the environment and peer set evolve over time.
+Automatic recalibration prevents the map from silently degrading as the environment and peer set evolve over time.
 
 ## 13. Wire Protocol (`protocol.py`)
 
@@ -631,4 +631,4 @@ Newline-delimited JSON messages:
 {"type":"acoustic_pong","request_id":"...","ok":true,"error":""}
 ```
 
-Plain-English relevance: a simple explicit wire protocol keeps nodes interoperable and debuggable as the sensing/fusion stack gets more sophisticated.
+A simple explicit wire protocol keeps nodes interoperable and debuggable as the sensing/fusion stack gets more sophisticated.
