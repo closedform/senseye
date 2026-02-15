@@ -403,19 +403,14 @@ $$
 Jacobian row for observation `i`:
 
 $$
-J_i =
-\left[
-\frac{\partial r_i}{\partial x},
-\frac{\partial r_i}{\partial y}
-\right]
-=
-\left[
-\frac{x-a_{x,i}}{\hat{d}_i},
-\frac{y-a_{y,i}}{\hat{d}_i}
-\right]
+J_i = [ (x-a_{x,i})/\hat{d}_i,\ (y-a_{y,i})/\hat{d}_i ]
 $$
 
-where `\hat{d}_i = \lVert x-a_i \rVert` with a small epsilon floor in implementation to avoid singularity.
+$$
+\hat{d}_i = \max(\sqrt{(x-a_{x,i})^2 + (y-a_{y,i})^2}, \epsilon)
+$$
+
+with a small epsilon floor in implementation to avoid singularity.
 
 Outlier handling:
 
