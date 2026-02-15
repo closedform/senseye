@@ -124,8 +124,6 @@ senseye/
 3. Improve acoustic signature scalability with more channels and chirp-code separation so larger node counts have fewer collisions.
 4. Replace fixed RF model constants with per-node/per-environment calibration (`PATHLOSS_N`, intercept) learned during setup.
 5. Propagate uncertainty end-to-end into map and topology updates so low-confidence estimates are explicitly down-weighted in final outputs.
-6. Add a reproducible benchmark harness with logged datasets and metrics (layout error, device-position RMSE, motion/occupancy precision-recall).
-
 ## Requirements
 
 - Python 3.11+

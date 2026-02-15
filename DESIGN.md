@@ -82,6 +82,8 @@ where $n$ is the path-loss exponent and $A$ is the 1 m intercept (dBm magnitude)
 
 During calibration wall detection, the free-space exponent $n = 2.0$ is used instead so that all indoor propagation effects are visible as excess attenuation (see section 10).
 
+Plain-English relevance: this is the bridge from raw signal strength to a rough physical distance baseline, which is required before attenuation can be interpreted as likely obstruction or wall evidence.
+
 ### 3.2 Acoustic ToF Model
 
 One-way distance from time-of-flight:
@@ -93,6 +95,8 @@ $$
 with $c = 343\,\text{m/s}$ (approximate speed of sound at ~20 C), defined canonically in `node/acoustic.py` and re-exported by `fusion/acoustic_range.py`.
 
 In peer ranging, ToF is estimated from matched-filter peak timing after accounting for scheduled chirp delay and approximate network latency compensation.
+
+Plain-English relevance: acoustic ToF gives much tighter distance estimates than RSSI, so it is the key source of geometric accuracy during calibration.
 
 ### 3.3 Acoustic Signature Channelization
 
@@ -119,6 +123,8 @@ This yields channels:
 - `22-23 kHz`
 
 During peer ranging, the requesting node expects the target peer chirp on that peer's deterministic band and performs matched filtering against that signature template.
+
+Plain-English relevance: per-node acoustic signatures reduce emitter ambiguity, so simultaneous or nearby chirps are less likely to be misattributed.
 
 ## 4. Per-Link Adaptive Kalman Filter (`node/filter.py`)
 
@@ -197,6 +203,8 @@ If $z_{\text{score}} > \text{threshold}$, use $Q_{\text{scaled}} = \text{scaling
 
 Interpretation: large normalized innovation means the constant-velocity prior is no longer adequate (e.g., abrupt path change), so process noise is temporarily increased to reduce lag.
 
+Plain-English relevance: this keeps link estimates stable when noise is small, but still lets the system react quickly when the environment actually changes.
+
 ## 5. Local Inference (`node/inference.py`)
 
 ### 5.1 Motion from Variance
@@ -259,6 +267,8 @@ $$
 P(\text{occupied}|\text{zone}) = \min\left(\frac{\text{avg attenuation}}{20\,\text{dB}}, 1\right)
 $$
 
+Plain-English relevance: this stage converts noisy per-device/per-link measurements into actionable local semantics like "motion" and "occupancy" that downstream fusion can combine.
+
 ## 6. Peer Mesh and Gossip (`node/peer.py`, `main.py`)
 
 - Discovery: mDNS `_senseye._tcp.local.`
@@ -266,6 +276,8 @@ $$
 - Relay control: `(node_id, sequence_number)` dedup + `hop_count` TTL
 
 Beliefs are relayed iff `hop_count > 0`, with `hop_count := hop_count - 1` on relay.
+
+Plain-English relevance: gossip + TTL gives each node enough shared context for fusion without flooding the network or creating belief loops.
 
 ## 7. Consensus Fusion (`fusion/consensus.py`)
 
@@ -352,6 +364,8 @@ $$
 
 Zone occupied/motion beliefs are fused with inverse-variance weighting using $c_{\text{zone}}$.
 
+Plain-English relevance: consensus lets multiple imperfect nodes agree on a single estimate while naturally trusting high-confidence peers more than low-confidence ones.
+
 ## 8. Robust Trilateration (`fusion/trilateration.py`)
 
 Given anchors $a_i$ and measured distances $d_i$, estimate position $x$.
@@ -426,6 +440,8 @@ $$
 \text{score} = \frac{1}{N}\sum_{i=1}^{N}\min(\rho_i^2, 9)
 $$
 
+Plain-English relevance: robust trilateration keeps position estimates usable even when some range inputs are wrong, stale, or multipath-corrupted.
+
 ## 9. Tomographic Reconstruction (`fusion/tomography.py`)
 
 Build linear model over grid cells:
@@ -493,6 +509,8 @@ $$
 clipped to $[0.05, 5.0]$.
 
 Practical role: when the inverse problem is underdetermined or ill-conditioned (many cells, few links), larger $\alpha$ suppresses unstable high-frequency artifacts in the attenuation map.
+
+Plain-English relevance: tomography turns many link-level attenuations into a spatial heatmap, which is what allows wall and obstruction structure to appear in map space.
 
 ## 10. Static Map Generation (`calibration.py`, `mapping/static/*`)
 
@@ -563,6 +581,8 @@ Negative eigenvalues from noisy/non-Euclidean distances are clamped to zero befo
 - Tomography peak cells also produce wall candidates.
 - Rooms are inferred by connectivity with wall intersections.
 
+Plain-English relevance: this stage converts abstract signal evidence into a human-usable floorplan representation (walls, rooms, and topology).
+
 ## 11. Dynamic World Update (`mapping/dynamic/*`)
 
 Zone motion intensity decays exponentially:
@@ -578,6 +598,8 @@ I_t \leftarrow \max(I_t, P_{\text{motion,zone}})
 $$
 
 Devices are assigned to nearest room center when position estimates exist.
+
+Plain-English relevance: dynamic updates keep the map useful after calibration by continuously layering live motion and device activity onto static geometry.
 
 ## 12. Recalibration Policy (`main.py`)
 
@@ -596,6 +618,8 @@ $$
 
 where $C$ is the set of devices present in both snapshots. Drift triggers recalibration when enough common devices exist and drift exceeds threshold.
 
+Plain-English relevance: automatic recalibration is what prevents the map from silently degrading as the environment and peer set evolve over time.
+
 ## 13. Wire Protocol (`protocol.py`)
 
 Newline-delimited JSON messages:
@@ -606,3 +630,5 @@ Newline-delimited JSON messages:
 {"type":"acoustic_ping","request_id":"...","delay_s":0.2,"sample_rate":48000,"freq_start":18000,"freq_end":19000,"chirp_duration":0.01}
 {"type":"acoustic_pong","request_id":"...","ok":true,"error":""}
 ```
+
+Plain-English relevance: a simple explicit wire protocol keeps nodes interoperable and debuggable as the sensing/fusion stack gets more sophisticated.
