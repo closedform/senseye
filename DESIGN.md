@@ -96,10 +96,10 @@ In peer ranging, ToF is estimated from matched-filter peak timing after accounti
 
 ### 3.3 Acoustic Signature Channelization
 
-Each audio-capable node is assigned a deterministic chirp-band signature from its `node_id`:
+Each audio-capable node is assigned a deterministic chirp-band signature from its node identifier `i`:
 
 $$
-k = H(\text{node\_id}) \bmod N_{\text{channels}}
+k = H(i) \bmod N_c
 $$
 
 $$
@@ -107,7 +107,7 @@ f_{\text{start}} = f_0 + k\Delta f, \quad
 f_{\text{end}} = f_{\text{start}} + \Delta f
 $$
 
-where `H` is SHA-256 interpreted as an integer, `N_channels = 6`, `f0 = 17,000 Hz`, and `Delta f = 1,000 Hz`.
+where `H` is SHA-256 interpreted as an integer, `N_c = 6`, `f0 = 17,000 Hz`, and `Delta f = 1,000 Hz`.
 
 This yields channels:
 
