@@ -107,8 +107,7 @@ k = H(i) \bmod N_c
 $$
 
 $$
-f_{\mathrm{start}} = f_0 + k\Delta f, \quad
-f_{\mathrm{end}} = f_{\mathrm{start}} + \Delta f
+f_{\mathrm{start}} = f_0 + k\Delta f, \quad f_{\mathrm{end}} = f_{\mathrm{start}} + \Delta f
 $$
 
 where $H$ is SHA-256 interpreted as an integer, $N_c = 6$, $f_0 = 17{,}000\,\mathrm{Hz}$, and $\Delta f = 1{,}000\,\mathrm{Hz}$.
@@ -131,52 +130,27 @@ Per-node acoustic signatures reduce emitter ambiguity, so simultaneous or nearby
 Each `(source_id, target_id)` path has a constant-velocity state:
 
 $$
-\mathbf{x}_k =
-\begin{bmatrix}
-\mathrm{rssi}_k \\
-\dot{\mathrm{rssi}}_k
-\end{bmatrix},
-\quad
-\mathbf{F} =
-\begin{bmatrix}
-1 & dt \\
-0 & 1
-\end{bmatrix},
-\quad
-\mathbf{H} =
-\begin{bmatrix}
-1 & 0
-\end{bmatrix}
+\mathbf{x}_k = \begin{bmatrix} \mathrm{rssi}_k \\ \dot{\mathrm{rssi}}_k \end{bmatrix}, \quad \mathbf{F} = \begin{bmatrix} 1 & dt \\ 0 & 1 \end{bmatrix}, \quad \mathbf{H} = \begin{bmatrix} 1 & 0 \end{bmatrix}
 $$
 
 Continuous-acceleration-inspired process covariance:
 
 $$
-\mathbf{Q} = q
-\begin{bmatrix}
-\frac{dt^4}{4} & \frac{dt^3}{2} \\
-\frac{dt^3}{2} & dt^2
-\end{bmatrix}
+\mathbf{Q} = q \begin{bmatrix} \frac{dt^4}{4} & \frac{dt^3}{2} \\ \frac{dt^3}{2} & dt^2 \end{bmatrix}
 $$
 
 Prediction/update:
 
 $$
-\hat{\mathbf{x}}^-_k = \mathbf{F}\hat{\mathbf{x}}_{k-1},
-\quad
-\mathbf{P}^-_k = \mathbf{F}\mathbf{P}_{k-1}\mathbf{F}^T + \mathbf{Q}
+\hat{\mathbf{x}}^-_k = \mathbf{F}\hat{\mathbf{x}}_{k-1}, \quad \mathbf{P}^-_k = \mathbf{F}\mathbf{P}_{k-1}\mathbf{F}^T + \mathbf{Q}
 $$
 
 $$
-\mathbf{y}_k = z_k - \mathbf{H}\hat{\mathbf{x}}^-_k,
-\quad
-\mathbf{S}_k = \mathbf{H}\mathbf{P}^-_k\mathbf{H}^T + R
+\mathbf{y}_k = z_k - \mathbf{H}\hat{\mathbf{x}}^-_k, \quad \mathbf{S}_k = \mathbf{H}\mathbf{P}^-_k\mathbf{H}^T + R
 $$
 
 $$
-\mathbf{K}_k = \mathbf{P}^-_k\mathbf{H}^T\mathbf{S}_k^{-1},
-\quad
-\hat{\mathbf{x}}_k = \hat{\mathbf{x}}^-_k + \mathbf{K}_k\mathbf{y}_k
+\mathbf{K}_k = \mathbf{P}^-_k\mathbf{H}^T\mathbf{S}_k^{-1}, \quad \hat{\mathbf{x}}_k = \hat{\mathbf{x}}^-_k + \mathbf{K}_k\mathbf{y}_k
 $$
 
 Dimensions:
@@ -343,9 +317,7 @@ This prevents long-range RSSI distance estimates from dominating.
 Final device scalar estimates follow weighted means:
 
 $$
-\hat{rssi} = \frac{\sum_i w_i \, rssi_i}{\sum_i w_i},
-\qquad
-\hat{d} = \frac{\sum_i w_{d,i} \, d_i}{\sum_i w_{d,i}}
+\hat{rssi} = \frac{\sum_i w_i \, rssi_i}{\sum_i w_i}, \qquad \hat{d} = \frac{\sum_i w_{d,i} \, d_i}{\sum_i w_{d,i}}
 $$
 
 ### 7.3 Zone Fusion
@@ -393,11 +365,7 @@ $$
 Tukey robust factor with cutoff $c_i = 2.5\,\sigma_i$:
 
 $$
-\omega_i =
-\begin{cases}
-\left(1 - (|r_i|/c_i)^2\right)^2 & |r_i| < c_i \\
-0 & |r_i| \ge c_i
-\end{cases}
+\omega_i = \begin{cases} \left(1 - (|r_i|/c_i)^2\right)^2 & |r_i| < c_i \\ 0 & |r_i| \ge c_i \end{cases}
 $$
 
 Final IRLS weight:
@@ -409,9 +377,7 @@ $$
 Gauss-Newton step:
 
 $$
-\Delta = (J^T W J + \lambda I)^{-1} J^T W r,
-\quad
-x \leftarrow x - \Delta
+\Delta = (J^T W J + \lambda I)^{-1} J^T W r, \quad x \leftarrow x - \Delta
 $$
 
 Jacobian row for observation $i$:
@@ -435,9 +401,7 @@ Outlier handling:
 Normalized residual and score:
 
 $$
-\rho_i = \frac{|r_i|}{\sigma_i},
-\qquad
-\mathrm{score} = \frac{1}{N}\sum_{i=1}^{N}\min(\rho_i^2, 9)
+\rho_i = \frac{|r_i|}{\sigma_i}, \qquad \mathrm{score} = \frac{1}{N}\sum_{i=1}^{N}\min(\rho_i^2, 9)
 $$
 
 Robust trilateration keeps position estimates usable even when some range inputs are wrong, stale, or multipath-corrupted.
@@ -459,11 +423,7 @@ Each row is normalized so links contribute by spatial distribution, not raw row 
 For link $i$ and cell $j$, unnormalized influence is:
 
 $$
-\tilde{A}_{ij} =
-\begin{cases}
-e^{-\frac{d_{ij}^2}{2\sigma_k^2}}, & d_{ij} \le r \\
-0, & d_{ij} > r
-\end{cases}
+\tilde{A}_{ij} = \begin{cases} e^{-\frac{d_{ij}^2}{2\sigma_k^2}}, & d_{ij} \le r \\ 0, & d_{ij} > r \end{cases}
 $$
 
 where $d_{ij}$ is point-to-segment distance, $r$ is influence radius, and $\sigma_k = r/2$.
@@ -477,8 +437,7 @@ $$
 Confidence weights use the same inverse-variance mapping as consensus fusion (section 7):
 
 $$
-c_i^{\mathrm{eff}} = \min(\max(c_i, 0.01), 0.99), \quad
-W = \mathrm{diag}\left(\frac{c_i^{\mathrm{eff}}}{1-c_i^{\mathrm{eff}}}\right)
+c_i^{\mathrm{eff}} = \min(\max(c_i, 0.01), 0.99), \quad W = \mathrm{diag}\left(\frac{c_i^{\mathrm{eff}}}{1-c_i^{\mathrm{eff}}}\right)
 $$
 
 Weighted ridge objective:
@@ -496,8 +455,7 @@ $$
 Equivalent whitened least-squares form used numerically:
 
 $$
-\bar{A} = W^{1/2}A,\quad \bar{b}=W^{1/2}b,\quad
-x^* = (\bar{A}^T\bar{A} + \alpha I)^{-1}\bar{A}^T\bar{b}
+\bar{A} = W^{1/2}A,\quad \bar{b}=W^{1/2}b,\quad x^* = (\bar{A}^T\bar{A} + \alpha I)^{-1}\bar{A}^T\bar{b}
 $$
 
 Adaptive regularization:
@@ -519,11 +477,7 @@ Tomography turns many link-level attenuations into a spatial heatmap, which is w
 RF and acoustic distance matrices are merged with acoustic priority when available:
 
 $$
-D_{ij} =
-\begin{cases}
-D^{\mathrm{acoustic}}_{ij}, & \mathrm{if\ measured\ acoustically} \\
-D^{\mathrm{rf}}_{ij}, & \mathrm{otherwise}
-\end{cases}
+D_{ij} = \begin{cases} D^{\mathrm{acoustic}}_{ij}, & \mathrm{if\ measured\ acoustically} \\ D^{\mathrm{rf}}_{ij}, & \mathrm{otherwise} \end{cases}
 $$
 
 For unknown pairwise distances between non-reference nodes (where only distances to the reference are known), the expected distance under a uniform angular prior is used:
@@ -537,10 +491,7 @@ This follows from the law of cosines with $E[\cos(\theta)] = 0$ over uniform $[0
 When peers share direct acoustic ranges, missing acoustic entries are daisy-chained over the peer graph with bounded-hop shortest paths:
 
 $$
-D^{\mathrm{chain}}_{ij}
-=
-\min_{p \in \mathcal{P}_{ij},\; h(p)\le H}
-\sum_{(u,v)\in p} D^{\mathrm{acoustic}}_{uv}
+D^{\mathrm{chain}}_{ij} = \min_{p \in \mathcal{P}_{ij},\; h(p)\le H} \sum_{(u,v)\in p} D^{\mathrm{acoustic}}_{uv}
 $$
 
 with hop limit $H = 3$. Chained values are only used when a direct acoustic measurement for $(i,j)$ is unavailable.
@@ -560,9 +511,7 @@ The 1 m intercept $A = 45$ is shared with the indoor model since it reflects har
 From pairwise distances $D$, classical MDS:
 
 $$
-B = -\frac{1}{2} J D^{\circ 2} J,
-\quad
-J = I - \frac{1}{n}\mathbf{1}\mathbf{1}^T
+B = -\frac{1}{2} J D^{\circ 2} J, \quad J = I - \frac{1}{n}\mathbf{1}\mathbf{1}^T
 $$
 
 Take top-2 eigenpairs of $B$ for 2D coordinates, then anchor local node at $(0,0)$.
